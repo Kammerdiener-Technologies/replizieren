@@ -31,45 +31,31 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// SecretReconciler reconciles a Secret object
-type SecretReconciler struct {
+type ConfigMapWatcherReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
 const (
-	replicateKeyS       = "replizieren.dev/replicate"
-	rolloutOnUpdateKeyS = "replizieren.dev/rollout-on-update"
+	replicateKeyCM        = "replizieren.dev/replicate"
+	rolloutOnUpdateKeyCM = "replizieren.dev/rollout-on-update"
 )
 
-// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=secrets/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=core,resources=secrets/finalizers,verbs=update
-
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Secret object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
-func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *ConfigMapWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	var secret corev1.Secret
-	if err := r.Get(ctx, req.NamespacedName, &secret); err != nil {
+	var cm corev1.ConfigMap
+	if err := r.Get(ctx, req.NamespacedName, &cm); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
 	}
 
-	replicateTo := secret.Annotations[replicateKeyS]
-	rollout := secret.Annotations[rolloutOnUpdateKeyS] == "true"
+	replicateTo := cm.Annotations[replicateKeyCM]
+	rollout := cm.Annotations[rolloutOnUpdateKeyCM] == "true"
 
-	if replicateTo == "" || replicateTo == "false" && rollout == false {
+	if replicateTo == "" || replicateTo == "false" && !rollout {
 		logger.Info("Replication not set, skipping")
 		return ctrl.Result{}, nil
 	}
@@ -81,7 +67,7 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, err
 		}
 		for _, ns := range nsList.Items {
-			if ns.Name != secret.Namespace {
+			if ns.Name != cm.Namespace {
 				targetNamespaces = append(targetNamespaces, ns.Name)
 			}
 		}
@@ -91,26 +77,26 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	for _, ns := range targetNamespaces {
 		if replicateTo != "false" && replicateTo != "" {
-			if err := r.replicateSecret(ctx, &secret, ns); err != nil {
-				logger.Error(err, "Failed to replicate secret", "namespace", ns)
+			if err := r.replicateConfigMap(ctx, &cm, ns); err != nil {
+				logger.Error(err, "Failed to replicate configmap", "namespace", ns)
 				continue
 			}
 		}
 		if rollout {
-			_ = r.restartDeploymentsUsingSecret(ctx, secret.Name, ns)
+			_ = r.restartDeploymentsUsingConfigMap(ctx, cm.Name, ns)
 		}
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *SecretReconciler) replicateSecret(ctx context.Context, original *corev1.Secret, namespace string) error {
+func (r *ConfigMapWatcherReconciler) replicateConfigMap(ctx context.Context, original *corev1.ConfigMap, namespace string) error {
 	clone := original.DeepCopy()
 	clone.Namespace = namespace
 	clone.ResourceVersion = ""
 	clone.UID = ""
 
-	existing := &corev1.Secret{}
+	existing := &corev1.ConfigMap{}
 	err := r.Get(ctx, types.NamespacedName{Name: clone.Name, Namespace: namespace}, existing)
 	if err != nil && errors.IsNotFound(err) {
 		return r.Create(ctx, clone)
@@ -122,34 +108,34 @@ func (r *SecretReconciler) replicateSecret(ctx context.Context, original *corev1
 	return r.Update(ctx, clone)
 }
 
-func (r *SecretReconciler) restartDeploymentsUsingSecret(ctx context.Context, secretName, namespace string) error {
+func (r *ConfigMapWatcherReconciler) restartDeploymentsUsingConfigMap(ctx context.Context, cmName, namespace string) error {
 	var deploys appsv1.DeploymentList
 	if err := r.List(ctx, &deploys, client.InNamespace(namespace)); err != nil {
 		return err
 	}
 
 	for _, deploy := range deploys.Items {
-		if isUsingSecret(&deploy, secretName) {
+		if isUsingConfigMap(&deploy, cmName) {
 			patch := client.MergeFrom(deploy.DeepCopy())
 			if deploy.Spec.Template.Annotations == nil {
 				deploy.Spec.Template.Annotations = map[string]string{}
 			}
-			deploy.Spec.Template.Annotations["secret.restartedAt"] = time.Now().Format(time.RFC3339)
+			deploy.Spec.Template.Annotations["configmap.restartedAt"] = time.Now().Format(time.RFC3339)
 			_ = r.Patch(ctx, &deploy, patch)
 		}
 	}
 	return nil
 }
 
-func isUsingSecret(deploy *appsv1.Deployment, secretName string) bool {
+func isUsingConfigMap(deploy *appsv1.Deployment, cmName string) bool {
 	for _, vol := range deploy.Spec.Template.Spec.Volumes {
-		if vol.Secret != nil && vol.Secret.SecretName == secretName {
+		if vol.ConfigMap != nil && vol.ConfigMap.Name == cmName {
 			return true
 		}
 	}
 	for _, c := range deploy.Spec.Template.Spec.Containers {
 		for _, envFrom := range c.EnvFrom {
-			if envFrom.SecretRef != nil && envFrom.SecretRef.Name == secretName {
+			if envFrom.ConfigMapRef != nil && envFrom.ConfigMapRef.Name == cmName {
 				return true
 			}
 		}
@@ -157,10 +143,9 @@ func isUsingSecret(deploy *appsv1.Deployment, secretName string) bool {
 	return false
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *SecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ConfigMapWatcherReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Secret{}).
-		Named("secret").
+		For(&corev1.ConfigMap{}).
+		Named("configmapwatcher").
 		Complete(r)
 }
