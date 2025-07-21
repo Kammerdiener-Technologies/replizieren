@@ -69,7 +69,7 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	replicateTo := secret.Annotations[replicateKeyS]
 	rollout := secret.Annotations[rolloutOnUpdateKeyS] == "true"
 
-	if replicateTo == "" || replicateTo == "false" && rollout == false {
+	if replicateTo == "" || replicateTo == "false" && !rollout {
 		logger.Info("Replication not set, skipping")
 		return ctrl.Result{}, nil
 	}
