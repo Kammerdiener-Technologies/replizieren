@@ -57,7 +57,7 @@ var _ = Describe("Secret Replication", func() {
 				Name:      "replicated-secret",
 				Namespace: namespace1.Name,
 				Annotations: map[string]string{
-					replicateKey: "test-ns2",
+					replicateKeyS: "test-ns2",
 				},
 			},
 			Data: map[string][]byte{"key": []byte("value")},
@@ -78,8 +78,8 @@ var _ = Describe("Secret Replication", func() {
 				Name:      "rollout-secret",
 				Namespace: namespace1.Name,
 				Annotations: map[string]string{
-					replicateKey:       "test-ns1",
-					rolloutOnUpdateKey: "true",
+					replicateKeyS:       "test-ns1",
+					rolloutOnUpdateKeyS: "true",
 				},
 			},
 			Data: map[string][]byte{"token": []byte("abc")},
@@ -140,7 +140,3 @@ var _ = Describe("Secret Replication", func() {
 		}, 10*time.Second, 500*time.Millisecond).ShouldNot(BeEmpty())
 	})
 })
-
-func pointerTo[T any](val T) *T {
-	return &val
-}

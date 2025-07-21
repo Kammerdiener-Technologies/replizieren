@@ -17,16 +17,109 @@ limitations under the License.
 package controller
 
 import (
+	"context"
+	"testing"
+	"time"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ = Describe("ConfigMapWatcher Controller", func() {
-	Context("When reconciling a resource", func() {
+func TestConfigMapReplication(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "ConfigMap Reconciler Suite")
+}
 
-		It("should successfully reconcile the resource", func() {
+var _ = Describe("ConfigMap Replication", func() {
+	ctx := context.Background()
+	var ns1, ns2 *corev1.Namespace
 
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
-		})
+	BeforeEach(func() {
+		ns1 = &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cm-ns1"}}
+		ns2 = &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cm-ns2"}}
+		Expect(k8sClient.Create(ctx, ns1)).To(Succeed())
+		Expect(k8sClient.Create(ctx, ns2)).To(Succeed())
+	})
+
+	AfterEach(func() {
+		_ = k8sClient.Delete(ctx, ns1)
+		_ = k8sClient.Delete(ctx, ns2)
+	})
+
+	It("should replicate configmap to specified namespaces", func() {
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "replicated-config",
+				Namespace: ns1.Name,
+				Annotations: map[string]string{
+					replicateKeyCM: "cm-ns2",
+				},
+			},
+			Data: map[string]string{"app.conf": "value"},
+		}
+		Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+
+		Eventually(func() error {
+			var replicated corev1.ConfigMap
+			return k8sClient.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: ns2.Name}, &replicated)
+		}, 10*time.Second, 500*time.Millisecond).Should(Succeed())
+	})
+
+	It("should trigger rollout if configmap used in deployment", func() {
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "rollout-config",
+				Namespace: ns1.Name,
+				Annotations: map[string]string{
+					replicateKeyCM:       "cm-ns1",
+					rolloutOnUpdateKeyCM: "true",
+				},
+			},
+			Data: map[string]string{"config": "val"},
+		}
+		Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+
+		deploy := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "rollout-deploy", Namespace: ns1.Name},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: pointerTo[int32](1),
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test"}},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name:    "main",
+							Image:   "busybox",
+							Command: []string{"sleep", "3600"},
+							EnvFrom: []corev1.EnvFromSource{{
+								ConfigMapRef: &corev1.ConfigMapEnvSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "rollout-config",
+									},
+								},
+							}},
+						}},
+					},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, deploy)).To(Succeed())
+
+		// Patch ConfigMap to trigger the controller
+		patch := client.MergeFrom(cm.DeepCopy())
+		cm.Data["config"] = "updated-val"
+		Expect(k8sClient.Patch(ctx, cm, patch)).To(Succeed())
+
+		Eventually(func() string {
+			var d appsv1.Deployment
+			_ = k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: ns1.Name}, &d)
+			return d.Spec.Template.Annotations["configmap.restartedAt"]
+		}, 10*time.Second, 500*time.Millisecond).ShouldNot(BeEmpty())
 	})
 })

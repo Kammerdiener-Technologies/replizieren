@@ -37,7 +37,7 @@ type ConfigMapWatcherReconciler struct {
 }
 
 const (
-	replicateKeyCM        = "replizieren.dev/replicate"
+	replicateKeyCM       = "replizieren.dev/replicate"
 	rolloutOnUpdateKeyCM = "replizieren.dev/rollout-on-update"
 )
 
