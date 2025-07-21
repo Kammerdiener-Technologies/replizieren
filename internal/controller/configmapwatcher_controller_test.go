@@ -41,10 +41,33 @@ var _ = Describe("ConfigMap Replication", func() {
 	var ns1, ns2 *corev1.Namespace
 
 	BeforeEach(func() {
+		// Delete namespaces if they exist
+		ns1Delete := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cm-ns1"}}
+		ns2Delete := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cm-ns2"}}
+		_ = k8sClient.Delete(ctx, ns1Delete)
+		_ = k8sClient.Delete(ctx, ns2Delete)
+
+		// Wait for namespaces to be deleted
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: "cm-ns1"}, &corev1.Namespace{})
+		}, 10*time.Second).Should(Not(Succeed()))
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: "cm-ns2"}, &corev1.Namespace{})
+		}, 10*time.Second).Should(Not(Succeed()))
+
+		// Create new namespaces
 		ns1 = &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cm-ns1"}}
 		ns2 = &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cm-ns2"}}
 		Expect(k8sClient.Create(ctx, ns1)).To(Succeed())
 		Expect(k8sClient.Create(ctx, ns2)).To(Succeed())
+
+		// Wait for namespaces to be ready
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: ns1.Name}, &corev1.Namespace{})
+		}, 10*time.Second).Should(Succeed())
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: ns2.Name}, &corev1.Namespace{})
+		}, 10*time.Second).Should(Succeed())
 	})
 
 	AfterEach(func() {
@@ -65,6 +88,11 @@ var _ = Describe("ConfigMap Replication", func() {
 		}
 		Expect(k8sClient.Create(ctx, cm)).To(Succeed())
 
+		// Wait for configmap to be created in source namespace
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: ns1.Name}, &corev1.ConfigMap{})
+		}, 10*time.Second).Should(Succeed())
+
 		Eventually(func() error {
 			var replicated corev1.ConfigMap
 			return k8sClient.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: ns2.Name}, &replicated)
@@ -84,6 +112,11 @@ var _ = Describe("ConfigMap Replication", func() {
 			Data: map[string]string{"config": "val"},
 		}
 		Expect(k8sClient.Create(ctx, cm)).To(Succeed())
+
+		// Wait for configmap to be created
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: ns1.Name}, &corev1.ConfigMap{})
+		}, 10*time.Second).Should(Succeed())
 
 		deploy := &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{Name: "rollout-deploy", Namespace: ns1.Name},
@@ -110,6 +143,11 @@ var _ = Describe("ConfigMap Replication", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, deploy)).To(Succeed())
+
+		// Wait for deployment to be created
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: ns1.Name}, &appsv1.Deployment{})
+		}, 10*time.Second).Should(Succeed())
 
 		// Patch ConfigMap to trigger the controller
 		patch := client.MergeFrom(cm.DeepCopy())

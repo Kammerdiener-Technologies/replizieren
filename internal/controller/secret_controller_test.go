@@ -40,10 +40,33 @@ var _ = Describe("Secret Replication", func() {
 	var namespace1, namespace2 *corev1.Namespace
 
 	BeforeEach(func() {
+		// Delete namespaces if they exist
+		ns1 := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-ns1"}}
+		ns2 := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-ns2"}}
+		_ = k8sClient.Delete(ctx, ns1)
+		_ = k8sClient.Delete(ctx, ns2)
+
+		// Wait for namespaces to be deleted
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: "test-ns1"}, &corev1.Namespace{})
+		}, 10*time.Second).Should(Not(Succeed()))
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: "test-ns2"}, &corev1.Namespace{})
+		}, 10*time.Second).Should(Not(Succeed()))
+
+		// Create new namespaces
 		namespace1 = &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-ns1"}}
 		namespace2 = &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-ns2"}}
 		Expect(k8sClient.Create(ctx, namespace1)).To(Succeed())
 		Expect(k8sClient.Create(ctx, namespace2)).To(Succeed())
+
+		// Wait for namespaces to be ready
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: namespace1.Name}, &corev1.Namespace{})
+		}, 10*time.Second).Should(Succeed())
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: namespace2.Name}, &corev1.Namespace{})
+		}, 10*time.Second).Should(Succeed())
 	})
 
 	AfterEach(func() {
@@ -57,12 +80,18 @@ var _ = Describe("Secret Replication", func() {
 				Name:      "replicated-secret",
 				Namespace: namespace1.Name,
 				Annotations: map[string]string{
-					replicateKeyS: "test-ns2",
+					replicateKeyS: namespace2.Name,
 				},
 			},
-			Data: map[string][]byte{"key": []byte("value")},
+			StringData: map[string]string{"key": "value"},
+			Type:       corev1.SecretTypeOpaque,
 		}
 		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+		// Wait for secret to be created in source namespace
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: namespace1.Name}, &corev1.Secret{})
+		}, 10*time.Second).Should(Succeed())
 
 		// Check replication in ns2
 		Eventually(func() error {
@@ -78,13 +107,19 @@ var _ = Describe("Secret Replication", func() {
 				Name:      "rollout-secret",
 				Namespace: namespace1.Name,
 				Annotations: map[string]string{
-					replicateKeyS:       "test-ns1",
+					replicateKeyS:       namespace1.Name,
 					rolloutOnUpdateKeyS: "true",
 				},
 			},
-			Data: map[string][]byte{"token": []byte("abc")},
+			StringData: map[string]string{"token": "abc"},
+			Type:       corev1.SecretTypeOpaque,
 		}
 		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+		// Wait for secret to be created
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: namespace1.Name}, &corev1.Secret{})
+		}, 10*time.Second).Should(Succeed())
 
 		// Create a deployment that uses the secret
 		deploy := &appsv1.Deployment{
@@ -127,9 +162,14 @@ var _ = Describe("Secret Replication", func() {
 		}
 		Expect(k8sClient.Create(ctx, deploy)).To(Succeed())
 
+		// Wait for deployment to be created
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: namespace1.Name}, &appsv1.Deployment{})
+		}, 10*time.Second).Should(Succeed())
+
 		// Trigger update
 		patch := client.MergeFrom(secret.DeepCopy())
-		secret.Data["token"] = []byte("updated")
+		secret.Data = map[string][]byte{"token": []byte("updated")}
 		Expect(k8sClient.Patch(ctx, secret, patch)).To(Succeed())
 
 		// Ensure annotation is updated (rollout triggered)
