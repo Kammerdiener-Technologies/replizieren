@@ -52,8 +52,8 @@ func (r *ConfigMapWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	const replicateTo = cm.Annotations[replicateKeyCM]
-	const rollout = cm.Annotations[rolloutOnUpdateKeyCM] == "true"
+	replicateTo := cm.Annotations[replicateKeyCM]
+	rollout := cm.Annotations[rolloutOnUpdateKeyCM] == "true"
 
 	if replicateTo == "" || replicateTo == "false" && !rollout {
 		logger.Info("Replication not set, skipping")
