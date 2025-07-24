@@ -37,41 +37,14 @@ func TestSecretReplication(t *testing.T) {
 
 var _ = Describe("Secret Replication", func() {
 	ctx := context.Background()
-	var namespace1, namespace2 *corev1.Namespace
 
-	BeforeEach(func() {
-		// Create new namespaces
-		namespace1 = &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-ns1"}}
-		namespace2 = &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-ns2"}}
+	It("should replicate secret to listed namespaces", func() {
+		// Create test namespaces
+		namespace1 := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "s-ns1-repl"}}
+		namespace2 := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "s-ns2-repl"}}
 		Expect(k8sClient.Create(ctx, namespace1)).To(Succeed())
 		Expect(k8sClient.Create(ctx, namespace2)).To(Succeed())
 
-		// Wait for namespaces to be ready
-		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: namespace1.Name}, &corev1.Namespace{})
-		}, 30*time.Second).Should(Succeed())
-		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: namespace2.Name}, &corev1.Namespace{})
-		}, 30*time.Second).Should(Succeed())
-	})
-
-	AfterEach(func() {
-		// Delete namespaces if they exist
-		ns1Delete := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-ns1"}}
-		ns2Delete := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-ns2"}}
-		_ = k8sClient.Delete(ctx, ns1Delete)
-		_ = k8sClient.Delete(ctx, ns2Delete)
-
-		// Wait for namespaces to be deleted
-		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: "test-ns1"}, &corev1.Namespace{})
-		}, 30*time.Second).ShouldNot(Succeed())
-		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: "test-ns2"}, &corev1.Namespace{})
-		}, 30*time.Second).ShouldNot(Succeed())
-	})
-
-	It("should replicate secret to listed namespaces", func() {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "replicated-secret",
@@ -98,13 +71,17 @@ var _ = Describe("Secret Replication", func() {
 	})
 
 	It("should trigger rollout if secret used in deployment", func() {
+		// Create test namespace
+		namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "s-ns-rollout"}}
+		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+
 		// Create secret with rollout enabled
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "rollout-secret",
-				Namespace: namespace1.Name,
+				Namespace: namespace.Name,
 				Annotations: map[string]string{
-					replicateKeyS:       namespace1.Name,
+					replicateKeyS:       namespace.Name,
 					rolloutOnUpdateKeyS: "true",
 				},
 			},
@@ -115,14 +92,14 @@ var _ = Describe("Secret Replication", func() {
 
 		// Wait for secret to be created
 		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: namespace1.Name}, &corev1.Secret{})
+			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: namespace.Name}, &corev1.Secret{})
 		}, 30*time.Second).Should(Succeed())
 
 		// Create a deployment that uses the secret
 		deploy := &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "rollout-deploy",
-				Namespace: namespace1.Name,
+				Namespace: namespace.Name,
 			},
 			Spec: appsv1.DeploymentSpec{
 				Replicas: pointerTo[int32](1),
@@ -161,7 +138,7 @@ var _ = Describe("Secret Replication", func() {
 
 		// Wait for deployment to be created
 		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: namespace1.Name}, &appsv1.Deployment{})
+			return k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: namespace.Name}, &appsv1.Deployment{})
 		}, 30*time.Second).Should(Succeed())
 
 		// Trigger update
@@ -172,7 +149,7 @@ var _ = Describe("Secret Replication", func() {
 		// Ensure annotation is updated (rollout triggered)
 		Eventually(func() string {
 			var d appsv1.Deployment
-			_ = k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: namespace1.Name}, &d)
+			_ = k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: namespace.Name}, &d)
 			return d.Spec.Template.Annotations["secret.restartedAt"]
 		}, 30*time.Second, 1*time.Second).ShouldNot(BeEmpty())
 	})

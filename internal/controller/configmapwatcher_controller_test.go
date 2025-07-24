@@ -38,47 +38,20 @@ func TestConfigMapReplication(t *testing.T) {
 
 var _ = Describe("ConfigMap Replication", func() {
 	ctx := context.Background()
-	var ns1, ns2 *corev1.Namespace
 
-	BeforeEach(func() {
-		// Create new namespaces
-		ns1 = &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cm-ns1"}}
-		ns2 = &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cm-ns2"}}
+	It("should replicate configmap to specified namespaces", func() {
+		// Create test namespaces
+		ns1 := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cm-test-ns1"}}
+		ns2 := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cm-test-ns2"}}
 		Expect(k8sClient.Create(ctx, ns1)).To(Succeed())
 		Expect(k8sClient.Create(ctx, ns2)).To(Succeed())
 
-		// Wait for namespaces to be ready
-		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: ns1.Name}, &corev1.Namespace{})
-		}, 30*time.Second).Should(Succeed())
-		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: ns2.Name}, &corev1.Namespace{})
-		}, 30*time.Second).Should(Succeed())
-	})
-
-	AfterEach(func() {
-		// Delete namespaces if they exist
-		ns1Delete := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cm-ns1"}}
-		ns2Delete := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cm-ns2"}}
-		_ = k8sClient.Delete(ctx, ns1Delete)
-		_ = k8sClient.Delete(ctx, ns2Delete)
-
-		// Wait for namespaces to be deleted
-		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: "cm-ns1"}, &corev1.Namespace{})
-		}, 30*time.Second).ShouldNot(Succeed())
-		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: "cm-ns2"}, &corev1.Namespace{})
-		}, 30*time.Second).ShouldNot(Succeed())
-	})
-
-	It("should replicate configmap to specified namespaces", func() {
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "replicated-config",
 				Namespace: ns1.Name,
 				Annotations: map[string]string{
-					replicateKeyCM: "cm-ns2",
+					replicateKeyCM: "cm-test-ns2",
 				},
 			},
 			Data: map[string]string{"app.conf": "value"},
@@ -98,12 +71,16 @@ var _ = Describe("ConfigMap Replication", func() {
 	})
 
 	It("should trigger rollout if configmap used in deployment", func() {
+		// Create test namespace
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "cm-test-rollout"}}
+		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "rollout-config",
-				Namespace: ns1.Name,
+				Namespace: ns.Name,
 				Annotations: map[string]string{
-					replicateKeyCM:       "cm-ns1",
+					replicateKeyCM:       ns.Name,
 					rolloutOnUpdateKeyCM: "true",
 				},
 			},
@@ -113,11 +90,11 @@ var _ = Describe("ConfigMap Replication", func() {
 
 		// Wait for configmap to be created
 		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: ns1.Name}, &corev1.ConfigMap{})
+			return k8sClient.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: ns.Name}, &corev1.ConfigMap{})
 		}, 30*time.Second).Should(Succeed())
 
 		deploy := &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "rollout-deploy", Namespace: ns1.Name},
+			ObjectMeta: metav1.ObjectMeta{Name: "rollout-deploy", Namespace: ns.Name},
 			Spec: appsv1.DeploymentSpec{
 				Replicas: pointerTo[int32](1),
 				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
@@ -144,7 +121,7 @@ var _ = Describe("ConfigMap Replication", func() {
 
 		// Wait for deployment to be created
 		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: ns1.Name}, &appsv1.Deployment{})
+			return k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: ns.Name}, &appsv1.Deployment{})
 		}, 30*time.Second).Should(Succeed())
 
 		// Patch ConfigMap to trigger the controller
@@ -154,7 +131,7 @@ var _ = Describe("ConfigMap Replication", func() {
 
 		Eventually(func() string {
 			var d appsv1.Deployment
-			_ = k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: ns1.Name}, &d)
+			_ = k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: ns.Name}, &d)
 			return d.Spec.Template.Annotations["configmap.restartedAt"]
 		}, 30*time.Second, 1*time.Second).ShouldNot(BeEmpty())
 	})
