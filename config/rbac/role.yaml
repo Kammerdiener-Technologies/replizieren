@@ -7,6 +7,7 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
   - secrets
   verbs:
   - create
@@ -19,14 +20,32 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps/finalizers
   - secrets/finalizers
   verbs:
   - update
 - apiGroups:
   - ""
   resources:
+  - configmaps/status
   - secrets/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - get
+  - list
+  - patch

@@ -17,8 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	"context"
-	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -30,27 +28,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func TestSecretReplication(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Secret Reconciler Suite")
-}
-
 var _ = Describe("Secret Replication", func() {
-	ctx := context.Background()
+	const (
+		timeout  = 30 * time.Second
+		interval = 1 * time.Second
+	)
 
-	It("should replicate secret to listed namespaces", func() {
-		// Create test namespaces
-		namespace1 := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "s-ns1-repl"}}
-		namespace2 := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "s-ns2-repl"}}
-		Expect(k8sClient.Create(ctx, namespace1)).To(Succeed())
-		Expect(k8sClient.Create(ctx, namespace2)).To(Succeed())
+	// Test 1: Basic single namespace replication
+	It("should replicate secret to single namespace", func() {
+		ns1 := createNamespace("s-single-src")
+		ns2 := createNamespace("s-single-tgt")
 
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "replicated-secret",
-				Namespace: namespace1.Name,
+				Name:      "single-ns-secret",
+				Namespace: ns1.Name,
 				Annotations: map[string]string{
-					replicateKeyS: namespace2.Name,
+					ReplicateKey: ns2.Name,
 				},
 			},
 			StringData: map[string]string{"key": "value"},
@@ -58,31 +52,241 @@ var _ = Describe("Secret Replication", func() {
 		}
 		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
-		// Wait for secret to be created in source namespace
 		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: namespace1.Name}, &corev1.Secret{})
-		}, 30*time.Second).Should(Succeed())
-
-		// Check replication in ns2
-		Eventually(func() error {
-			var replicated corev1.Secret
-			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: namespace2.Name}, &replicated)
-		}, 30*time.Second, 1*time.Second).Should(Succeed())
+			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: ns2.Name}, &corev1.Secret{})
+		}, timeout, interval).Should(Succeed())
 	})
 
-	It("should trigger rollout if secret used in deployment", func() {
-		// Create test namespace
-		namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "s-ns-rollout"}}
-		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+	// Test 2: Multiple namespace replication
+	It("should replicate secret to multiple namespaces", func() {
+		ns1 := createNamespace("s-multi-src")
+		ns2 := createNamespace("s-multi-tgt1")
+		ns3 := createNamespace("s-multi-tgt2")
 
-		// Create secret with rollout enabled
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "multi-ns-secret",
+				Namespace: ns1.Name,
+				Annotations: map[string]string{
+					ReplicateKey: ns2.Name + "," + ns3.Name,
+				},
+			},
+			StringData: map[string]string{"key": "value"},
+			Type:       corev1.SecretTypeOpaque,
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: ns2.Name}, &corev1.Secret{})
+		}, timeout, interval).Should(Succeed())
+
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: ns3.Name}, &corev1.Secret{})
+		}, timeout, interval).Should(Succeed())
+	})
+
+	// Test 3: Replicate to all namespaces
+	It("should replicate secret to all namespaces when annotation is true", func() {
+		ns1 := createNamespace("s-all-src")
+		ns2 := createNamespace("s-all-tgt1")
+		ns3 := createNamespace("s-all-tgt2")
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "all-ns-secret",
+				Namespace: ns1.Name,
+				Annotations: map[string]string{
+					ReplicateKey: "true",
+				},
+			},
+			StringData: map[string]string{"key": "value"},
+			Type:       corev1.SecretTypeOpaque,
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+		// Should replicate to both target namespaces
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: ns2.Name}, &corev1.Secret{})
+		}, timeout, interval).Should(Succeed())
+
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: ns3.Name}, &corev1.Secret{})
+		}, timeout, interval).Should(Succeed())
+	})
+
+	// Test 4: Skip replication when annotation is empty
+	It("should skip replication when annotation is empty", func() {
+		ns1 := createNamespace("s-empty-src")
+		ns2 := createNamespace("s-empty-tgt")
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "no-replicate-secret",
+				Namespace: ns1.Name,
+				// No ReplicateKey annotation
+			},
+			StringData: map[string]string{"key": "value"},
+			Type:       corev1.SecretTypeOpaque,
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+		// Give it some time to potentially replicate
+		Consistently(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: ns2.Name}, &corev1.Secret{})
+		}, 5*time.Second, interval).ShouldNot(Succeed())
+	})
+
+	// Test 5: Skip replication when annotation is "false"
+	It("should skip replication when annotation is false", func() {
+		ns1 := createNamespace("s-false-src")
+		ns2 := createNamespace("s-false-tgt")
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "false-replicate-secret",
+				Namespace: ns1.Name,
+				Annotations: map[string]string{
+					ReplicateKey: "false",
+				},
+			},
+			StringData: map[string]string{"key": "value"},
+			Type:       corev1.SecretTypeOpaque,
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+		Consistently(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: ns2.Name}, &corev1.Secret{})
+		}, 5*time.Second, interval).ShouldNot(Succeed())
+	})
+
+	// Test 6: Update existing secret in target namespace
+	It("should update existing secret in target namespace", func() {
+		ns1 := createNamespace("s-update-src")
+		ns2 := createNamespace("s-update-tgt")
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "update-secret",
+				Namespace: ns1.Name,
+				Annotations: map[string]string{
+					ReplicateKey: ns2.Name,
+				},
+			},
+			StringData: map[string]string{"key": "original"},
+			Type:       corev1.SecretTypeOpaque,
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+		// Wait for initial replication
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: ns2.Name}, &corev1.Secret{})
+		}, timeout, interval).Should(Succeed())
+
+		// Update the secret
+		patch := client.MergeFrom(secret.DeepCopy())
+		secret.StringData = map[string]string{"key": "updated"}
+		Expect(k8sClient.Patch(ctx, secret, patch)).To(Succeed())
+
+		// Verify update was replicated
+		Eventually(func() string {
+			var replicated corev1.Secret
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: ns2.Name}, &replicated); err != nil {
+				return ""
+			}
+			return string(replicated.Data["key"])
+		}, timeout, interval).Should(Equal("updated"))
+	})
+
+	// Test 7: Handle whitespace in namespace list
+	It("should handle whitespace in namespace list", func() {
+		ns1 := createNamespace("s-ws-src")
+		ns2 := createNamespace("s-ws-tgt")
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "whitespace-secret",
+				Namespace: ns1.Name,
+				Annotations: map[string]string{
+					ReplicateKey: "  " + ns2.Name + "  ", // Leading/trailing whitespace
+				},
+			},
+			StringData: map[string]string{"key": "value"},
+			Type:       corev1.SecretTypeOpaque,
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: ns2.Name}, &corev1.Secret{})
+		}, timeout, interval).Should(Succeed())
+	})
+
+	// Test 8: Handle empty entries in namespace list
+	It("should handle empty entries in namespace list", func() {
+		ns1 := createNamespace("s-empty-entry-src")
+		ns2 := createNamespace("s-empty-entry-tgt")
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "empty-entry-secret",
+				Namespace: ns1.Name,
+				Annotations: map[string]string{
+					ReplicateKey: ns2.Name + ",,", // Empty entries
+				},
+			},
+			StringData: map[string]string{"key": "value"},
+			Type:       corev1.SecretTypeOpaque,
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: ns2.Name}, &corev1.Secret{})
+		}, timeout, interval).Should(Succeed())
+	})
+
+	// Test 9: Exclude source namespace from replication targets
+	It("should exclude source namespace from replication targets", func() {
+		ns1 := createNamespace("s-exclude-src")
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "exclude-self-secret",
+				Namespace: ns1.Name,
+				Annotations: map[string]string{
+					ReplicateKey: ns1.Name, // Target is same as source
+				},
+			},
+			StringData: map[string]string{"key": "value"},
+			Type:       corev1.SecretTypeOpaque,
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+		// Verify only one secret exists in source namespace
+		Consistently(func() int {
+			var secrets corev1.SecretList
+			if err := k8sClient.List(ctx, &secrets, client.InNamespace(ns1.Name)); err != nil {
+				return -1
+			}
+			count := 0
+			for _, s := range secrets.Items {
+				if s.Name == secret.Name {
+					count++
+				}
+			}
+			return count
+		}, 5*time.Second, interval).Should(Equal(1))
+	})
+
+	// Test 10: Trigger rollout when annotation is true
+	It("should trigger rollout when rollout-on-update annotation is true", func() {
+		ns := createNamespace("s-rollout-ns")
+
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "rollout-secret",
-				Namespace: namespace.Name,
+				Namespace: ns.Name,
 				Annotations: map[string]string{
-					replicateKeyS:       namespace.Name,
-					rolloutOnUpdateKeyS: "true",
+					ReplicateKey:       ns.Name,
+					RolloutOnUpdateKey: "true",
 				},
 			},
 			StringData: map[string]string{"token": "abc"},
@@ -90,67 +294,181 @@ var _ = Describe("Secret Replication", func() {
 		}
 		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
-		// Wait for secret to be created
-		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: namespace.Name}, &corev1.Secret{})
-		}, 30*time.Second).Should(Succeed())
-
-		// Create a deployment that uses the secret
-		deploy := &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "rollout-deploy",
-				Namespace: namespace.Name,
-			},
-			Spec: appsv1.DeploymentSpec{
-				Replicas: pointerTo[int32](1),
-				Selector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{
-						"app": "rollout",
-					},
-				},
-				Template: corev1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: map[string]string{
-							"app": "rollout",
-						},
-					},
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{
-								Name:  "test",
-								Image: "busybox",
-								EnvFrom: []corev1.EnvFromSource{
-									{
-										SecretRef: &corev1.SecretEnvSource{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "rollout-secret",
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
+		deploy := createDeploymentWithSecretEnvFrom(ns.Name, "rollout-deploy", secret.Name)
 		Expect(k8sClient.Create(ctx, deploy)).To(Succeed())
 
 		// Wait for deployment to be created
 		Eventually(func() error {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: namespace.Name}, &appsv1.Deployment{})
-		}, 30*time.Second).Should(Succeed())
+			return k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: ns.Name}, &appsv1.Deployment{})
+		}, timeout, interval).Should(Succeed())
 
 		// Trigger update
 		patch := client.MergeFrom(secret.DeepCopy())
-		secret.Data = map[string][]byte{"token": []byte("updated")}
+		secret.StringData = map[string]string{"token": "updated"}
 		Expect(k8sClient.Patch(ctx, secret, patch)).To(Succeed())
 
-		// Ensure annotation is updated (rollout triggered)
+		// Verify rollout annotation is set
 		Eventually(func() string {
 			var d appsv1.Deployment
-			_ = k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: namespace.Name}, &d)
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: ns.Name}, &d); err != nil {
+				return ""
+			}
+			if d.Spec.Template.Annotations == nil {
+				return ""
+			}
 			return d.Spec.Template.Annotations["secret.restartedAt"]
-		}, 30*time.Second, 1*time.Second).ShouldNot(BeEmpty())
+		}, timeout, interval).ShouldNot(BeEmpty())
+	})
+
+	// Test 11: Replicate data matches source
+	It("should replicate secret data that matches source", func() {
+		ns1 := createNamespace("s-data-src")
+		ns2 := createNamespace("s-data-tgt")
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "data-match-secret",
+				Namespace: ns1.Name,
+				Annotations: map[string]string{
+					ReplicateKey: ns2.Name,
+				},
+			},
+			StringData: map[string]string{
+				"username": "admin",
+				"password": "secret123",
+			},
+			Type: corev1.SecretTypeOpaque,
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+		Eventually(func() map[string][]byte {
+			var replicated corev1.Secret
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: ns2.Name}, &replicated); err != nil {
+				return nil
+			}
+			return replicated.Data
+		}, timeout, interval).Should(And(
+			HaveKeyWithValue("username", []byte("admin")),
+			HaveKeyWithValue("password", []byte("secret123")),
+		))
+	})
+
+	// Test 12: Deployment with volume mount triggers rollout
+	It("should trigger rollout for deployment using secret as volume", func() {
+		ns := createNamespace("s-vol-rollout-ns")
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "vol-rollout-secret",
+				Namespace: ns.Name,
+				Annotations: map[string]string{
+					ReplicateKey:       ns.Name,
+					RolloutOnUpdateKey: "true",
+				},
+			},
+			StringData: map[string]string{"config": "data"},
+			Type:       corev1.SecretTypeOpaque,
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+		deploy := createDeploymentWithSecretVolume(ns.Name, "vol-deploy", secret.Name)
+		Expect(k8sClient.Create(ctx, deploy)).To(Succeed())
+
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: ns.Name}, &appsv1.Deployment{})
+		}, timeout, interval).Should(Succeed())
+
+		// Trigger update
+		patch := client.MergeFrom(secret.DeepCopy())
+		secret.StringData = map[string]string{"config": "updated-data"}
+		Expect(k8sClient.Patch(ctx, secret, patch)).To(Succeed())
+
+		Eventually(func() string {
+			var d appsv1.Deployment
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: ns.Name}, &d); err != nil {
+				return ""
+			}
+			if d.Spec.Template.Annotations == nil {
+				return ""
+			}
+			return d.Spec.Template.Annotations["secret.restartedAt"]
+		}, timeout, interval).ShouldNot(BeEmpty())
 	})
 })
+
+// Helper functions
+
+func createNamespace(name string) *corev1.Namespace {
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}}
+	Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+	return ns
+}
+
+func createDeploymentWithSecretEnvFrom(namespace, name, secretName string) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: pointerTo[int32](1),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": name},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": name},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:  "main",
+						Image: "busybox",
+						EnvFrom: []corev1.EnvFromSource{{
+							SecretRef: &corev1.SecretEnvSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+							},
+						}},
+					}},
+				},
+			},
+		},
+	}
+}
+
+func createDeploymentWithSecretVolume(namespace, name, secretName string) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: pointerTo[int32](1),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": name},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": name},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:  "main",
+						Image: "busybox",
+						VolumeMounts: []corev1.VolumeMount{{
+							Name:      "secret-vol",
+							MountPath: "/secrets",
+						}},
+					}},
+					Volumes: []corev1.Volume{{
+						Name: "secret-vol",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: secretName,
+							},
+						},
+					}},
+				},
+			},
+		},
+	}
+}
