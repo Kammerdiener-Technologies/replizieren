@@ -85,6 +85,15 @@ func (r *ConfigMapWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
+	// Also trigger rollout in source namespace if enabled
+	if config.RolloutOnUpdate {
+		if err := RestartDeployments(ctx, r.Client, cm.Namespace, "configmap.restartedAt", func(d *appsv1.Deployment) bool {
+			return IsDeploymentUsingConfigMap(d, cm.Name)
+		}); err != nil {
+			logger.Error(err, "Failed to restart deployments in source namespace", "namespace", cm.Namespace)
+		}
+	}
+
 	return ctrl.Result{}, nil
 }
 

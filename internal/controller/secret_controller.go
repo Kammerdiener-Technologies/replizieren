@@ -85,6 +85,15 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	}
 
+	// Also trigger rollout in source namespace if enabled
+	if config.RolloutOnUpdate {
+		if err := RestartDeployments(ctx, r.Client, secret.Namespace, "secret.restartedAt", func(d *appsv1.Deployment) bool {
+			return IsDeploymentUsingSecret(d, secret.Name)
+		}); err != nil {
+			logger.Error(err, "Failed to restart deployments in source namespace", "namespace", secret.Namespace)
+		}
+	}
+
 	return ctrl.Result{}, nil
 }
 
