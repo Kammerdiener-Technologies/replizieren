@@ -145,6 +145,12 @@ data:
 - [Examples](examples) - Real-world usage patterns
 - [API Reference](api-reference) - Annotation documentation
 
+## Support
+
+If you find Replizieren useful, consider supporting its development:
+
+<a href="https://buymeacoffee.com/kammerdiener" target="_blank"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow.svg?style=for-the-badge&logo=buy-me-a-coffee&logoColor=white" alt="Buy Me A Coffee"></a>
+
 ## License
 
 Replizieren is open source and available under the [Apache 2.0 License](https://github.com/Kammerdiener-Technologies/replizieren/blob/main/LICENSE).

@@ -3,6 +3,7 @@
 [![Test](https://github.com/Kammerdiener-Technologies/replizieren/actions/workflows/test.yml/badge.svg)](https://github.com/Kammerdiener-Technologies/replizieren/actions/workflows/test.yml)
 [![Lint](https://github.com/Kammerdiener-Technologies/replizieren/actions/workflows/lint.yml/badge.svg)](https://github.com/Kammerdiener-Technologies/replizieren/actions/workflows/lint.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow.svg?style=flat&logo=buy-me-a-coffee)](https://buymeacoffee.com/kammerdiener)
 
 **Replizieren** (German for "replicate") is a Kubernetes operator that automatically replicates Secrets and ConfigMaps across namespaces. It also supports triggering rolling restarts of Deployments when the replicated resources change.
 
@@ -241,6 +242,12 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+## Support
+
+If you find Replizieren useful, consider supporting its development:
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow.svg?style=flat&logo=buy-me-a-coffee&logoColor=white)](https://buymeacoffee.com/kammerdiener)
 
 ## License
 
