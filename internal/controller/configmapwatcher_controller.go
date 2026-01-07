@@ -18,8 +18,6 @@ package controller
 
 import (
 	"context"
-	"strings"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -31,16 +29,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// ConfigMapWatcherReconciler reconciles a ConfigMap object
 type ConfigMapWatcherReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-const (
-	replicateKeyCM       = "replizieren.dev/replicate"
-	rolloutOnUpdateKeyCM = "replizieren.dev/rollout-on-update"
-)
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=configmaps/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core,resources=configmaps/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;patch
 
+// Reconcile handles ConfigMap replication and deployment rollout triggers.
 func (r *ConfigMapWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -52,38 +53,44 @@ func (r *ConfigMapWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	replicateTo := cm.Annotations[replicateKeyCM]
-	rollout := cm.Annotations[rolloutOnUpdateKeyCM] == "true"
+	config := ParseReplicationConfig(cm.Annotations, cm.Namespace)
 
-	if replicateTo == "" || replicateTo == "false" && !rollout {
+	if config.SkipReplication && !config.RolloutOnUpdate {
 		logger.Info("Replication not set, skipping")
 		return ctrl.Result{}, nil
 	}
 
-	var targetNamespaces []string
-	if replicateTo == "true" {
-		var nsList corev1.NamespaceList
-		if err := r.List(ctx, &nsList); err != nil {
+	targetNamespaces := config.TargetNamespaces
+	if config.ReplicateAll {
+		var err error
+		targetNamespaces, err = GetAllNamespaces(ctx, r.Client, cm.Namespace)
+		if err != nil {
 			return ctrl.Result{}, err
 		}
-		for _, ns := range nsList.Items {
-			if ns.Name != cm.Namespace {
-				targetNamespaces = append(targetNamespaces, ns.Name)
-			}
-		}
-	} else {
-		targetNamespaces = strings.Split(replicateTo, ",")
 	}
 
 	for _, ns := range targetNamespaces {
-		if replicateTo != "false" && replicateTo != "" {
+		if !config.SkipReplication {
 			if err := r.replicateConfigMap(ctx, &cm, ns); err != nil {
 				logger.Error(err, "Failed to replicate configmap", "namespace", ns)
 				continue
 			}
 		}
-		if rollout {
-			_ = r.restartDeploymentsUsingConfigMap(ctx, cm.Name, ns)
+		if config.RolloutOnUpdate {
+			if err := RestartDeployments(ctx, r.Client, ns, "configmap.restartedAt", func(d *appsv1.Deployment) bool {
+				return IsDeploymentUsingConfigMap(d, cm.Name)
+			}); err != nil {
+				logger.Error(err, "Failed to restart deployments", "namespace", ns)
+			}
+		}
+	}
+
+	// Also trigger rollout in source namespace if enabled
+	if config.RolloutOnUpdate {
+		if err := RestartDeployments(ctx, r.Client, cm.Namespace, "configmap.restartedAt", func(d *appsv1.Deployment) bool {
+			return IsDeploymentUsingConfigMap(d, cm.Name)
+		}); err != nil {
+			logger.Error(err, "Failed to restart deployments in source namespace", "namespace", cm.Namespace)
 		}
 	}
 
@@ -108,41 +115,7 @@ func (r *ConfigMapWatcherReconciler) replicateConfigMap(ctx context.Context, ori
 	return r.Update(ctx, clone)
 }
 
-func (r *ConfigMapWatcherReconciler) restartDeploymentsUsingConfigMap(ctx context.Context, cmName, namespace string) error {
-	var deploys appsv1.DeploymentList
-	if err := r.List(ctx, &deploys, client.InNamespace(namespace)); err != nil {
-		return err
-	}
-
-	for _, deploy := range deploys.Items {
-		if isUsingConfigMap(&deploy, cmName) {
-			patch := client.MergeFrom(deploy.DeepCopy())
-			if deploy.Spec.Template.Annotations == nil {
-				deploy.Spec.Template.Annotations = map[string]string{}
-			}
-			deploy.Spec.Template.Annotations["configmap.restartedAt"] = time.Now().Format(time.RFC3339)
-			_ = r.Patch(ctx, &deploy, patch)
-		}
-	}
-	return nil
-}
-
-func isUsingConfigMap(deploy *appsv1.Deployment, cmName string) bool {
-	for _, vol := range deploy.Spec.Template.Spec.Volumes {
-		if vol.ConfigMap != nil && vol.ConfigMap.Name == cmName {
-			return true
-		}
-	}
-	for _, c := range deploy.Spec.Template.Spec.Containers {
-		for _, envFrom := range c.EnvFrom {
-			if envFrom.ConfigMapRef != nil && envFrom.ConfigMapRef.Name == cmName {
-				return true
-			}
-		}
-	}
-	return false
-}
-
+// SetupWithManager sets up the controller with the Manager.
 func (r *ConfigMapWatcherReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.ConfigMap{}).

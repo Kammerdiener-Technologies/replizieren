@@ -18,8 +18,6 @@ package controller
 
 import (
 	"context"
-	"strings"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,24 +35,13 @@ type SecretReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-const (
-	replicateKeyS       = "replizieren.dev/replicate"
-	rolloutOnUpdateKeyS = "replizieren.dev/rollout-on-update"
-)
-
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=secrets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=secrets/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;patch
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Secret object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
+// Reconcile handles Secret replication and deployment rollout triggers.
 func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -66,38 +53,44 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	replicateTo := secret.Annotations[replicateKeyS]
-	rollout := secret.Annotations[rolloutOnUpdateKeyS] == "true"
+	config := ParseReplicationConfig(secret.Annotations, secret.Namespace)
 
-	if replicateTo == "" || replicateTo == "false" && !rollout {
+	if config.SkipReplication && !config.RolloutOnUpdate {
 		logger.Info("Replication not set, skipping")
 		return ctrl.Result{}, nil
 	}
 
-	var targetNamespaces []string
-	if replicateTo == "true" {
-		var nsList corev1.NamespaceList
-		if err := r.List(ctx, &nsList); err != nil {
+	targetNamespaces := config.TargetNamespaces
+	if config.ReplicateAll {
+		var err error
+		targetNamespaces, err = GetAllNamespaces(ctx, r.Client, secret.Namespace)
+		if err != nil {
 			return ctrl.Result{}, err
 		}
-		for _, ns := range nsList.Items {
-			if ns.Name != secret.Namespace {
-				targetNamespaces = append(targetNamespaces, ns.Name)
-			}
-		}
-	} else {
-		targetNamespaces = strings.Split(replicateTo, ",")
 	}
 
 	for _, ns := range targetNamespaces {
-		if replicateTo != "false" && replicateTo != "" {
+		if !config.SkipReplication {
 			if err := r.replicateSecret(ctx, &secret, ns); err != nil {
 				logger.Error(err, "Failed to replicate secret", "namespace", ns)
 				continue
 			}
 		}
-		if rollout {
-			_ = r.restartDeploymentsUsingSecret(ctx, secret.Name, ns)
+		if config.RolloutOnUpdate {
+			if err := RestartDeployments(ctx, r.Client, ns, "secret.restartedAt", func(d *appsv1.Deployment) bool {
+				return IsDeploymentUsingSecret(d, secret.Name)
+			}); err != nil {
+				logger.Error(err, "Failed to restart deployments", "namespace", ns)
+			}
+		}
+	}
+
+	// Also trigger rollout in source namespace if enabled
+	if config.RolloutOnUpdate {
+		if err := RestartDeployments(ctx, r.Client, secret.Namespace, "secret.restartedAt", func(d *appsv1.Deployment) bool {
+			return IsDeploymentUsingSecret(d, secret.Name)
+		}); err != nil {
+			logger.Error(err, "Failed to restart deployments in source namespace", "namespace", secret.Namespace)
 		}
 	}
 
@@ -120,41 +113,6 @@ func (r *SecretReconciler) replicateSecret(ctx context.Context, original *corev1
 
 	clone.ResourceVersion = existing.ResourceVersion
 	return r.Update(ctx, clone)
-}
-
-func (r *SecretReconciler) restartDeploymentsUsingSecret(ctx context.Context, secretName, namespace string) error {
-	var deploys appsv1.DeploymentList
-	if err := r.List(ctx, &deploys, client.InNamespace(namespace)); err != nil {
-		return err
-	}
-
-	for _, deploy := range deploys.Items {
-		if isUsingSecret(&deploy, secretName) {
-			patch := client.MergeFrom(deploy.DeepCopy())
-			if deploy.Spec.Template.Annotations == nil {
-				deploy.Spec.Template.Annotations = map[string]string{}
-			}
-			deploy.Spec.Template.Annotations["secret.restartedAt"] = time.Now().Format(time.RFC3339)
-			_ = r.Patch(ctx, &deploy, patch)
-		}
-	}
-	return nil
-}
-
-func isUsingSecret(deploy *appsv1.Deployment, secretName string) bool {
-	for _, vol := range deploy.Spec.Template.Spec.Volumes {
-		if vol.Secret != nil && vol.Secret.SecretName == secretName {
-			return true
-		}
-	}
-	for _, c := range deploy.Spec.Template.Spec.Containers {
-		for _, envFrom := range c.EnvFrom {
-			if envFrom.SecretRef != nil && envFrom.SecretRef.Name == secretName {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // SetupWithManager sets up the controller with the Manager.
