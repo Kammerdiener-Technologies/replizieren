@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page.title }} | {{ site.title }}</title>
+    <meta name="description" content="{{ site.description }}">
+    <link rel="stylesheet" href="{{ '/assets/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔄</text></svg>">
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <a href="{{ '/' | relative_url }}" class="logo">
+          <h1>🔄 {{ site.title }}</h1>
+        </a>
+        <p class="tagline">{{ site.description }}</p>
+        <nav class="main-nav">
+          <a href="{{ '/' | relative_url }}" class="nav-link{% if page.url == '/' %} active{% endif %}">Home</a>
+          <a href="{{ '/installation' | relative_url }}" class="nav-link{% if page.url == '/installation' or page.url == '/installation.html' %} active{% endif %}">Installation</a>
+          <a href="{{ '/usage' | relative_url }}" class="nav-link{% if page.url == '/usage' or page.url == '/usage.html' %} active{% endif %}">Usage</a>
+          <a href="{{ '/examples' | relative_url }}" class="nav-link{% if page.url == '/examples' or page.url == '/examples.html' %} active{% endif %}">Examples</a>
+          <a href="{{ '/api-reference' | relative_url }}" class="nav-link{% if page.url == '/api-reference' or page.url == '/api-reference.html' %} active{% endif %}">API</a>
+          <a href="{{ site.github.repository_url }}" class="nav-link github-link" target="_blank">GitHub ↗</a>
+        </nav>
+      </div>
+    </header>
+
+    <div class="container">
+      <section id="main_content">
+        {{ content }}
+      </section>
+    </div>
+
+    <footer>
+      <div class="container">
+        <p>
+          <a href="{{ site.github.repository_url }}">Replizieren</a> is maintained by
+          <a href="https://github.com/{{ site.github.owner_name }}">{{ site.github.owner_name }}</a>
+        </p>
+        <p>
+          Licensed under <a href="{{ site.github.repository_url }}/blob/main/LICENSE">Apache 2.0</a>
+        </p>
+      </div>
+    </footer>
+
+    <style>
+      /* Additional layout-specific styles */
+      .container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 0 20px;
+      }
+
+      header {
+        padding: 30px 0 20px 0 !important;
+        text-align: center;
+      }
+
+      header .logo {
+        text-decoration: none !important;
+      }
+
+      header .logo:hover {
+        text-decoration: none !important;
+      }
+
+      header h1 {
+        margin: 0 0 10px 0 !important;
+        font-size: 2.5em !important;
+      }
+
+      header .tagline {
+        margin: 0 0 20px 0;
+        font-size: 1.1em;
+      }
+
+      .main-nav {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 20px;
+      }
+
+      .nav-link {
+        display: inline-block;
+        padding: 10px 18px;
+        background: var(--bg-tertiary);
+        border-radius: 6px;
+        color: var(--text-primary) !important;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        border: 1px solid transparent;
+      }
+
+      .nav-link:hover {
+        background: var(--border-color);
+        text-decoration: none !important;
+        border-color: var(--accent-color);
+      }
+
+      .nav-link.active {
+        background: var(--accent-color);
+        color: var(--bg-primary) !important;
+      }
+
+      .nav-link.github-link {
+        background: transparent;
+        border: 1px solid var(--border-color);
+      }
+
+      .nav-link.github-link:hover {
+        border-color: var(--accent-color);
+        background: rgba(88, 166, 255, 0.1);
+      }
+
+      #main_content {
+        padding: 40px 0;
+        min-height: calc(100vh - 300px);
+      }
+
+      footer {
+        text-align: center;
+        padding: 30px 0 !important;
+        margin-top: 40px;
+      }
+
+      footer p {
+        margin: 8px 0;
+        font-size: 14px;
+      }
+
+      @media (max-width: 600px) {
+        header h1 {
+          font-size: 1.8em !important;
+        }
+
+        .main-nav {
+          gap: 6px;
+        }
+
+        .nav-link {
+          padding: 8px 12px;
+          font-size: 14px;
+        }
+      }
+    </style>
+  </body>
+</html>
