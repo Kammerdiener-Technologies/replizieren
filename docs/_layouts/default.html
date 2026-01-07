@@ -42,6 +42,11 @@
         <p>
           Licensed under <a href="{{ site.github.repository_url }}/blob/main/LICENSE">Apache 2.0</a>
         </p>
+        <p class="support-link">
+          <a href="https://buymeacoffee.com/kammerdiener" target="_blank" class="coffee-btn">
+            ☕ Buy Me a Coffee
+          </a>
+        </p>
       </div>
     </footer>
 
@@ -130,6 +135,27 @@
       footer p {
         margin: 8px 0;
         font-size: 14px;
+      }
+
+      footer .support-link {
+        margin-top: 16px;
+      }
+
+      footer .coffee-btn {
+        display: inline-block;
+        padding: 10px 20px;
+        background: #ffdd00;
+        color: #000 !important;
+        border-radius: 8px;
+        font-weight: 600;
+        text-decoration: none !important;
+        transition: all 0.2s ease;
+      }
+
+      footer .coffee-btn:hover {
+        background: #ffeb3b;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 221, 0, 0.3);
       }
 
       @media (max-width: 600px) {
