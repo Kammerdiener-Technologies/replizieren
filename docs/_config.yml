@@ -1,0 +1,36 @@
+title: Replizieren
+description: A Kubernetes operator for replicating Secrets and ConfigMaps across namespaces
+remote_theme: pages-themes/minimal@v0.2.0
+plugins:
+  - jekyll-remote-theme
+
+# Navigation
+nav:
+  - title: Home
+    url: /
+  - title: Installation
+    url: /installation
+  - title: Usage
+    url: /usage
+  - title: Examples
+    url: /examples
+  - title: API Reference
+    url: /api-reference
+  - title: Contributing
+    url: /contributing
+
+# GitHub repository
+github:
+  repository_url: https://github.com/Kammerdiener-Technologies/replizieren
+  repository_name: replizieren
+  owner_name: Kammerdiener-Technologies
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+
+# Exclude from build
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor

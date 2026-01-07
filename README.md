@@ -1,121 +1,246 @@
-# replizieren
-// TODO(user): Add simple overview of use/purpose
+# Replizieren
 
-## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+[![Test](https://github.com/Kammerdiener-Technologies/replizieren/actions/workflows/test.yml/badge.svg)](https://github.com/Kammerdiener-Technologies/replizieren/actions/workflows/test.yml)
+[![Lint](https://github.com/Kammerdiener-Technologies/replizieren/actions/workflows/lint.yml/badge.svg)](https://github.com/Kammerdiener-Technologies/replizieren/actions/workflows/lint.yml)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-## Getting Started
+**Replizieren** (German for "replicate") is a Kubernetes operator that automatically replicates Secrets and ConfigMaps across namespaces. It also supports triggering rolling restarts of Deployments when the replicated resources change.
 
-### Prerequisites
-- go version v1.24.0+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
+> **Documentation:** [https://kammerdiener-technologies.github.io/replizieren](https://kammerdiener-technologies.github.io/replizieren)
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+## Features
 
-```sh
-make docker-build docker-push IMG=<some-registry>/replizieren:tag
+- **Secret Replication**: Automatically copy Secrets to one or more target namespaces
+- **ConfigMap Replication**: Automatically copy ConfigMaps to one or more target namespaces
+- **Flexible Targeting**: Replicate to specific namespaces, multiple namespaces, or all namespaces
+- **Rollout Triggers**: Optionally restart Deployments when Secrets/ConfigMaps are updated
+- **Lightweight**: Single controller handles both Secrets and ConfigMaps
+
+## Quick Start
+
+### Installation
+
+```bash
+# Using the pre-built image from GitHub Container Registry
+kubectl apply -f https://raw.githubusercontent.com/Kammerdiener-Technologies/replizieren/main/dist/install.yaml
 ```
 
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
+Or deploy with a specific version:
 
-**Install the CRDs into the cluster:**
-
-```sh
-make install
+```bash
+# Deploy using kustomize
+make deploy IMG=ghcr.io/kammerdiener-technologies/replizieren:v1.0.0
 ```
 
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
+### Basic Usage
 
-```sh
-make deploy IMG=<some-registry>/replizieren:tag
+Add the `replizieren.dev/replicate` annotation to any Secret or ConfigMap:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-secret
+  namespace: source-namespace
+  annotations:
+    replizieren.dev/replicate: "target-namespace"
+type: Opaque
+data:
+  password: cGFzc3dvcmQxMjM=
 ```
 
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
+The Secret will be automatically replicated to `target-namespace`.
 
-**Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
+## Annotations
 
-```sh
-kubectl apply -k config/samples/
+| Annotation | Values | Description |
+|------------|--------|-------------|
+| `replizieren.dev/replicate` | `"namespace"` | Replicate to a single namespace |
+| `replizieren.dev/replicate` | `"ns1,ns2,ns3"` | Replicate to multiple namespaces |
+| `replizieren.dev/replicate` | `"true"` | Replicate to all namespaces |
+| `replizieren.dev/replicate` | `"false"` or empty | Disable replication |
+| `replizieren.dev/rollout-on-update` | `"true"` | Restart Deployments using this resource when it changes |
+
+## Examples
+
+### Replicate to Multiple Namespaces
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: default
+  annotations:
+    replizieren.dev/replicate: "staging, production, testing"
+data:
+  app.conf: |
+    setting=value
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
+### Replicate to All Namespaces
 
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
-
-```sh
-kubectl delete -k config/samples/
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: registry-credentials
+  namespace: default
+  annotations:
+    replizieren.dev/replicate: "true"
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: ...
 ```
 
-**Delete the APIs(CRDs) from the cluster:**
+### Trigger Deployment Rollout on Update
 
-```sh
-make uninstall
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: default
+  annotations:
+    replizieren.dev/replicate: "production"
+    replizieren.dev/rollout-on-update: "true"
+data:
+  config.yaml: |
+    database_url: postgres://...
 ```
 
-**UnDeploy the controller from the cluster:**
+When `app-config` is updated, any Deployment in `production` (or `default`) that uses this ConfigMap will be restarted.
 
-```sh
+## How It Works
+
+1. **Watch**: The operator watches for changes to Secrets and ConfigMaps across all namespaces
+2. **Parse**: When a resource changes, it reads the `replizieren.dev/replicate` annotation
+3. **Replicate**: Creates or updates copies in the target namespaces
+4. **Rollout** (optional): If `rollout-on-update` is enabled, patches Deployments with a timestamp annotation to trigger a rolling restart
+
+### Deployment Detection
+
+The operator detects Deployments using a Secret or ConfigMap by checking:
+- **Volume mounts**: `spec.template.spec.volumes[].secret` or `spec.template.spec.volumes[].configMap`
+- **Environment variables**: `spec.template.spec.containers[].envFrom[].secretRef` or `spec.template.spec.containers[].envFrom[].configMapRef`
+
+## Installation Options
+
+### From GitHub Container Registry (Recommended)
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/Kammerdiener-Technologies/replizieren/main/dist/install.yaml
+```
+
+### Build from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/Kammerdiener-Technologies/replizieren.git
+cd replizieren
+
+# Build and push to your registry
+make docker-build docker-push IMG=your-registry/replizieren:latest
+
+# Deploy to cluster
+make deploy IMG=your-registry/replizieren:latest
+```
+
+### Uninstall
+
+```bash
 make undeploy
 ```
 
-## Project Distribution
+## Configuration
 
-Following the options to release and provide this solution to the users.
+The operator runs with minimal configuration. It uses:
+- Leader election for high availability
+- Health probes on port 8081
+- Restricted Pod Security Standards
 
-### By providing a bundle with all YAML files
+### Resource Requirements
 
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/replizieren:tag
+Default resource limits:
+```yaml
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
 ```
 
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
+## Development
 
-2. Using the installer
+### Prerequisites
 
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
+- Go 1.24+
+- Docker 17.03+
+- kubectl v1.11.3+
+- Access to a Kubernetes cluster
 
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/replizieren/<tag or branch>/dist/install.yaml
+### Running Locally
+
+```bash
+# Install CRDs (if any)
+make install
+
+# Run the controller locally
+make run
 ```
 
-### By providing a Helm Chart
+### Running Tests
 
-1. Build the chart using the optional helm plugin
+```bash
+# Unit tests
+make test
 
-```sh
-kubebuilder edit --plugins=helm/v1-alpha
+# E2E tests (requires cluster)
+make test-e2e
+
+# Linting
+make lint
 ```
 
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
+### Building
 
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
+```bash
+# Build binary
+make build
+
+# Build container image
+make docker-build IMG=your-registry/replizieren:latest
+
+# Build multi-arch image
+make docker-buildx IMG=your-registry/replizieren:latest
+```
+
+## Architecture
+
+```
+replizieren/
+├── cmd/main.go                 # Entry point
+├── internal/controller/
+│   ├── secret_controller.go    # Secret replication logic
+│   ├── configmapwatcher_controller.go  # ConfigMap replication logic
+│   └── replicator.go           # Shared helpers
+└── config/
+    ├── manager/                # Deployment manifests
+    ├── rbac/                   # RBAC configuration
+    └── default/                # Kustomize overlays
+```
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
 
-**NOTE:** Run `make help` for more information on all potential `make` targets
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
@@ -132,4 +257,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
