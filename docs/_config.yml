@@ -1,23 +1,12 @@
 title: Replizieren
 description: A Kubernetes operator for replicating Secrets and ConfigMaps across namespaces
-remote_theme: pages-themes/minimal@v0.2.0
+baseurl: ""
+url: "https://replizieren.dev"
+
+# Use a dark-friendly theme
+remote_theme: pages-themes/midnight@v0.2.0
 plugins:
   - jekyll-remote-theme
-
-# Navigation
-nav:
-  - title: Home
-    url: /
-  - title: Installation
-    url: /installation
-  - title: Usage
-    url: /usage
-  - title: Examples
-    url: /examples
-  - title: API Reference
-    url: /api-reference
-  - title: Contributing
-    url: /contributing
 
 # GitHub repository
 github:

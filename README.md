@@ -6,7 +6,7 @@
 
 **Replizieren** (German for "replicate") is a Kubernetes operator that automatically replicates Secrets and ConfigMaps across namespaces. It also supports triggering rolling restarts of Deployments when the replicated resources change.
 
-> **Documentation:** [https://kammerdiener-technologies.github.io/replizieren](https://kammerdiener-technologies.github.io/replizieren)
+> **Documentation:** [https://replizieren.dev](https://replizieren.dev)
 
 ## Features
 
