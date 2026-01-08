@@ -43,6 +43,9 @@
           Licensed under <a href="{{ site.github.repository_url }}/blob/main/LICENSE">Apache 2.0</a>
         </p>
         <p class="support-link">
+          <a href="https://github.com/sponsors/Kammerdiener-Technologies" target="_blank" class="sponsor-btn">
+            ❤️ Sponsor
+          </a>
           <a href="https://buymeacoffee.com/kammerdiener" target="_blank" class="coffee-btn">
             ☕ Buy Me a Coffee
           </a>
@@ -141,15 +144,31 @@
         margin-top: 16px;
       }
 
+      footer .sponsor-btn,
       footer .coffee-btn {
         display: inline-block;
         padding: 10px 20px;
-        background: #ffdd00;
-        color: #000 !important;
         border-radius: 8px;
         font-weight: 600;
         text-decoration: none !important;
         transition: all 0.2s ease;
+        margin: 0 6px;
+      }
+
+      footer .sponsor-btn {
+        background: #ea4aaa;
+        color: #fff !important;
+      }
+
+      footer .sponsor-btn:hover {
+        background: #f06292;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(234, 74, 170, 0.3);
+      }
+
+      footer .coffee-btn {
+        background: #ffdd00;
+        color: #000 !important;
       }
 
       footer .coffee-btn:hover {
