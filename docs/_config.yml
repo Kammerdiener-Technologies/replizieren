@@ -12,7 +12,7 @@ plugins:
 github:
   repository_url: https://github.com/Kammerdiener-Technologies/replizieren
   repository_name: replizieren
-  owner_name: Kammerdiener-Technologies
+  owner_name: Kammerdiener Technologies
 
 # Build settings
 markdown: kramdown
