@@ -6,8 +6,20 @@ on:
 
 jobs:
   test-e2e:
-    name: Run on Ubuntu
+    name: E2E (K8s ${{ matrix.k8s-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Test against multiple Kubernetes versions
+        # See https://github.com/kubernetes-sigs/kind/releases for available images
+        k8s-version:
+          - v1.32.0
+          - v1.31.4
+          - v1.30.8
+          - v1.29.12
+          - v1.28.15
+
     steps:
       - name: Clone the code
         uses: actions/checkout@v4
@@ -26,7 +38,24 @@ jobs:
       - name: Verify kind installation
         run: kind version
 
-      - name: Running Test e2e
+      - name: Running Test e2e on Kubernetes ${{ matrix.k8s-version }}
         run: |
           go mod tidy
-          make test-e2e
+          make test-e2e KIND_K8S_VERSION=${{ matrix.k8s-version }}
+
+  # Summary job that reports overall success/failure
+  test-e2e-summary:
+    name: E2E Test Summary
+    needs: test-e2e
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check test results
+        run: |
+          if [ "${{ needs.test-e2e.result }}" == "success" ]; then
+            echo "All E2E tests passed!"
+            exit 0
+          else
+            echo "Some E2E tests failed!"
+            exit 1
+          fi

@@ -23,15 +23,11 @@
 ### Installation
 
 ```bash
-# Using the pre-built image from GitHub Container Registry
+# Install a specific version (recommended)
+kubectl apply -f https://github.com/Kammerdiener-Technologies/replizieren/releases/download/v0.0.1/install.yaml
+
+# Or install the latest development version
 kubectl apply -f https://raw.githubusercontent.com/Kammerdiener-Technologies/replizieren/main/dist/install.yaml
-```
-
-Or deploy with a specific version:
-
-```bash
-# Deploy using kustomize
-make deploy IMG=ghcr.io/kammerdiener-technologies/replizieren:v1.0.0
 ```
 
 ### Basic Usage
@@ -59,9 +55,12 @@ The Secret will be automatically replicated to `target-namespace`.
 |------------|--------|-------------|
 | `replizieren.dev/replicate` | `"namespace"` | Replicate to a single namespace |
 | `replizieren.dev/replicate` | `"ns1,ns2,ns3"` | Replicate to multiple namespaces |
-| `replizieren.dev/replicate` | `"true"` | Replicate to all namespaces |
+| `replizieren.dev/replicate-all` | `"true"` | Replicate to all namespaces (recommended) |
+| `replizieren.dev/replicate` | `"true"` | Replicate to all namespaces (legacy) |
 | `replizieren.dev/replicate` | `"false"` or empty | Disable replication |
 | `replizieren.dev/rollout-on-update` | `"true"` | Restart Deployments using this resource when it changes |
+
+> **Note:** Use `replizieren.dev/replicate-all: "true"` for replicating to all namespaces. This is preferred over `replizieren.dev/replicate: "true"` because it allows you to have a namespace literally named "true". Set `replicate-all: "false"` explicitly if you need to target a namespace named "true".
 
 ## Examples
 
@@ -89,7 +88,7 @@ metadata:
   name: registry-credentials
   namespace: default
   annotations:
-    replizieren.dev/replicate: "true"
+    replizieren.dev/replicate-all: "true"
 type: kubernetes.io/dockerconfigjson
 data:
   .dockerconfigjson: ...
@@ -128,9 +127,13 @@ The operator detects Deployments using a Secret or ConfigMap by checking:
 
 ## Installation Options
 
-### From GitHub Container Registry (Recommended)
+### From GitHub Releases (Recommended)
 
 ```bash
+# Install a specific version
+kubectl apply -f https://github.com/Kammerdiener-Technologies/replizieren/releases/download/v0.0.1/install.yaml
+
+# Or latest development version
 kubectl apply -f https://raw.githubusercontent.com/Kammerdiener-Technologies/replizieren/main/dist/install.yaml
 ```
 
