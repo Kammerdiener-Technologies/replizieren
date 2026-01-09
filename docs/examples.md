@@ -20,7 +20,7 @@ metadata:
   name: docker-registry-credentials
   namespace: default
   annotations:
-    replizieren.dev/replicate: "true"
+    replizieren.dev/replicate-all: "true"
 type: kubernetes.io/dockerconfigjson
 data:
   .dockerconfigjson: |
@@ -237,7 +237,7 @@ metadata:
   name: logging-config
   namespace: shared-config
   annotations:
-    replizieren.dev/replicate: "true"  # All namespaces
+    replizieren.dev/replicate-all: "true"
 data:
   log_level: "info"
   log_format: "json"
@@ -386,12 +386,12 @@ Store your annotated resources in Git and deploy with ArgoCD or Flux:
 ```
 manifests/
 ├── secrets/
-│   ├── docker-registry.yaml    # replicate: "true"
+│   ├── docker-registry.yaml    # replicate-all: "true"
 │   ├── tls-certs.yaml          # replicate: "ingress-nginx"
 │   └── database-creds.yaml     # replicate: "api, worker"
 └── configmaps/
     ├── feature-flags.yaml      # replicate: "staging, prod"
-    └── logging-config.yaml     # replicate: "true"
+    └── logging-config.yaml     # replicate-all: "true"
 ```
 
 ### 3. Monitor Replication

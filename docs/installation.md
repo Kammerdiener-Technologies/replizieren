@@ -13,11 +13,19 @@ This guide covers different ways to install Replizieren in your Kubernetes clust
 - `kubectl` configured to communicate with your cluster
 - Cluster-admin privileges (for RBAC setup)
 
-## Quick Install
+## Quick Install (Recommended)
 
-The fastest way to get started is using the pre-built manifests:
+The easiest way to install is using the install manifest from a specific release:
 
 ```bash
+# Install a specific version (recommended for production)
+kubectl apply -f https://github.com/Kammerdiener-Technologies/replizieren/releases/download/v0.0.1/install.yaml
+```
+
+Or install the latest development version from main:
+
+```bash
+# Install latest (for development/testing)
 kubectl apply -f https://raw.githubusercontent.com/Kammerdiener-Technologies/replizieren/main/dist/install.yaml
 ```
 
@@ -37,21 +45,21 @@ kubectl get pods -n replizieren-system
 # replizieren-controller-manager-xxx        1/1     Running   0          30s
 ```
 
-## Install from GitHub Container Registry
+## Install with Kustomize
 
-For production deployments, use a specific version:
+For more control over the installation, use kustomize:
 
 ```bash
-# Using kustomize
-kubectl apply -k https://github.com/Kammerdiener-Technologies/replizieren/config/default?ref=v1.0.0
+# Using kustomize with a specific version
+kubectl apply -k https://github.com/Kammerdiener-Technologies/replizieren/config/default?ref=v0.0.1
 ```
 
-Or with `make`:
+Or clone and deploy:
 
 ```bash
 git clone https://github.com/Kammerdiener-Technologies/replizieren.git
 cd replizieren
-make deploy IMG=ghcr.io/kammerdiener-technologies/replizieren:v1.0.0
+make deploy IMG=ghcr.io/kammerdiener-technologies/replizieren:v0.0.1
 ```
 
 ## Build from Source
@@ -150,8 +158,8 @@ make undeploy
 ### Manual Uninstall
 
 ```bash
-# Delete the deployment
-kubectl delete -f https://raw.githubusercontent.com/Kammerdiener-Technologies/replizieren/main/dist/install.yaml
+# Delete using the same manifest you installed with
+kubectl delete -f https://github.com/Kammerdiener-Technologies/replizieren/releases/download/v0.0.1/install.yaml
 
 # Or delete namespace (removes everything)
 kubectl delete namespace replizieren-system

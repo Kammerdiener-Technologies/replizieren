@@ -21,9 +21,21 @@ Controls where the resource should be replicated.
 |-------|----------|
 | `"namespace"` | Replicate to a single namespace |
 | `"ns1, ns2, ns3"` | Replicate to multiple namespaces (comma-separated) |
-| `"true"` | Replicate to ALL namespaces in the cluster |
+| `"true"` | Replicate to ALL namespaces (legacy, use `replicate-all` instead) |
 | `"false"` | Explicitly disable replication |
 | (empty/missing) | No replication |
+
+### replizieren.dev/replicate-all
+
+Controls replication to all namespaces. This is the preferred way to replicate to all namespaces.
+
+| Value | Behavior |
+|-------|----------|
+| `"true"` | Replicate to ALL namespaces in the cluster |
+| `"false"` | Disable "all namespaces" mode (allows `replicate: "true"` to target a namespace named "true") |
+| (empty/missing) | Use `replicate` annotation behavior |
+
+> **Recommendation:** Use `replicate-all: "true"` instead of `replicate: "true"` for replicating to all namespaces. This removes ambiguity if you have a namespace literally named "true".
 
 ### replizieren.dev/rollout-on-update
 
@@ -84,7 +96,7 @@ metadata:
   name: docker-registry
   namespace: default
   annotations:
-    replizieren.dev/replicate: "true"
+    replizieren.dev/replicate-all: "true"
 type: kubernetes.io/dockerconfigjson
 data:
   .dockerconfigjson: eyJhdXRocyI6e319
@@ -216,7 +228,7 @@ kubectl annotate secret my-secret \
 
 ### 1. Use Specific Namespaces When Possible
 
-Instead of `"true"` (all namespaces), specify exactly which namespaces need the resource:
+Instead of `replicate-all: "true"` (all namespaces), specify exactly which namespaces need the resource:
 
 ```yaml
 annotations:

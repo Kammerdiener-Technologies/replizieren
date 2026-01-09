@@ -44,7 +44,8 @@ Two reconcilers watch Kubernetes resources and act on annotation changes:
 - **ConfigMapWatcherReconciler** (`configmapwatcher_controller.go`): Watches ConfigMaps
 
 Both support these annotations:
-- `replizieren.dev/replicate`: `"true"` (all namespaces) or comma-separated list (e.g., `"ns1,ns2"`)
+- `replizieren.dev/replicate`: comma-separated namespace list (e.g., `"ns1,ns2"`) or `"true"` (legacy all namespaces)
+- `replizieren.dev/replicate-all`: `"true"` to replicate to all namespaces (preferred over `replicate: "true"`)
 - `replizieren.dev/rollout-on-update`: `"true"` to restart deployments using the resource
 
 ### Key Flow

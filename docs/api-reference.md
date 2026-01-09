@@ -14,7 +14,7 @@ All Replizieren annotations use the `replizieren.dev/` prefix.
 ### replizieren.dev/replicate
 
 **Type:** String
-**Required:** Yes (for replication to occur)
+**Required:** Yes (for replication to occur, unless `replicate-all` is used)
 **Applies to:** Secrets, ConfigMaps
 
 Controls whether and where a resource should be replicated.
@@ -25,7 +25,7 @@ Controls whether and where a resource should be replicated.
 |-------|-------------|
 | `"namespace-name"` | Replicate to a single specific namespace |
 | `"ns1, ns2, ns3"` | Replicate to multiple namespaces (comma-separated) |
-| `"true"` | Replicate to all namespaces in the cluster |
+| `"true"` | Replicate to all namespaces (legacy, use `replicate-all` instead) |
 | `"false"` | Explicitly disable replication |
 | `""` (empty) | No replication (same as missing annotation) |
 
@@ -47,13 +47,57 @@ annotations:
 annotations:
   replizieren.dev/replicate: "staging, production, testing"
 
-# All namespaces
+# All namespaces (legacy - prefer replicate-all)
 annotations:
   replizieren.dev/replicate: "true"
 
 # Disabled
 annotations:
   replizieren.dev/replicate: "false"
+```
+
+---
+
+### replizieren.dev/replicate-all
+
+**Type:** String (boolean)
+**Required:** No
+**Applies to:** Secrets, ConfigMaps
+
+Controls replication to all namespaces. This is the **preferred** way to replicate to all namespaces as it removes ambiguity around namespace names.
+
+#### Values
+
+| Value | Description |
+|-------|-------------|
+| `"true"` | Replicate to all namespaces in the cluster |
+| `"false"` | Explicitly disable "all namespaces" mode |
+| `""` (empty/missing) | Falls back to `replicate` annotation behavior |
+
+#### Precedence Rules
+
+When both `replicate-all` and `replicate` are set:
+
+1. If `replicate-all: "true"`, replicate to all namespaces (ignores `replicate`)
+2. If `replicate-all: "false"`, use `replicate` for namespace list
+3. If `replicate-all: "false"` and `replicate: "true"`, "true" is treated as a namespace name
+
+#### Examples
+
+```yaml
+# All namespaces (recommended)
+annotations:
+  replizieren.dev/replicate-all: "true"
+
+# Target a namespace literally named "true"
+annotations:
+  replizieren.dev/replicate-all: "false"
+  replizieren.dev/replicate: "true"
+
+# replicate-all takes precedence (ignores namespace list)
+annotations:
+  replizieren.dev/replicate-all: "true"
+  replizieren.dev/replicate: "ns1, ns2"  # This is ignored
 ```
 
 ---
@@ -275,12 +319,32 @@ The controller does not require any environment variables. All configuration is 
 
 ## Compatibility
 
-| Kubernetes Version | Support |
-|-------------------|---------|
-| 1.24+ | Fully tested |
-| 1.20-1.23 | Should work |
-| < 1.20 | Not tested |
+### Kubernetes Versions
 
-| Go Version | Support |
-|------------|---------|
-| 1.24+ | Required |
+Replizieren is tested against multiple Kubernetes versions in CI. The following table shows the compatibility status:
+
+| Kubernetes Version | Status | Notes |
+|-------------------|--------|-------|
+| 1.32.x | Tested | Latest stable |
+| 1.31.x | Tested | |
+| 1.30.x | Tested | |
+| 1.29.x | Tested | |
+| 1.28.x | Tested | Minimum supported |
+| 1.27.x | Untested | May work |
+| < 1.27 | Unsupported | |
+
+**Note:** We test against the latest patch version of each minor release. Older patch versions should work but are not explicitly tested.
+
+### Version Support Policy
+
+- **Actively tested**: Last 5 Kubernetes minor versions
+- **Minimum supported**: Kubernetes 1.28+
+- **CI tested on every PR**: v1.32, v1.31, v1.30, v1.29, v1.28
+
+### Build Requirements
+
+| Requirement | Version |
+|-------------|---------|
+| Go | 1.24+ |
+| controller-runtime | v0.21.0 |
+| Kubebuilder | v4.6.0 |

@@ -66,6 +66,9 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 # CertManager is installed by default; skip with:
 # - CERT_MANAGER_INSTALL_SKIP=true
 KIND_CLUSTER ?= replizieren-test-e2e
+# KIND_K8S_VERSION can be set to test specific Kubernetes versions (e.g., v1.30.0, v1.29.4)
+# See https://github.com/kubernetes-sigs/kind/releases for available versions
+KIND_K8S_VERSION ?=
 
 .PHONY: setup-test-e2e
 setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
@@ -73,7 +76,11 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 		echo "Kind is not installed. Please install Kind manually."; \
 		exit 1; \
 	}
-	$(KIND) create cluster --name $(KIND_CLUSTER)
+	@if [ -n "$(KIND_K8S_VERSION)" ]; then \
+		$(KIND) create cluster --name $(KIND_CLUSTER) --image kindest/node:$(KIND_K8S_VERSION); \
+	else \
+		$(KIND) create cluster --name $(KIND_CLUSTER); \
+	fi
 
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.

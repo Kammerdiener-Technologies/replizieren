@@ -30,6 +30,7 @@ import (
 // Shared annotation keys for replication configuration
 const (
 	ReplicateKey       = "replizieren.dev/replicate"
+	ReplicateAllKey    = "replizieren.dev/replicate-all"
 	RolloutOnUpdateKey = "replizieren.dev/rollout-on-update"
 )
 
@@ -41,21 +42,49 @@ type ReplicationConfig struct {
 	SkipReplication  bool
 }
 
-// ParseReplicationConfig extracts replication settings from annotations
+// ParseReplicationConfig extracts replication settings from annotations.
+// It supports two methods for specifying "all namespaces":
+//   - replizieren.dev/replicate-all: "true" (preferred, unambiguous)
+//   - replizieren.dev/replicate: "true" (legacy, only when replicate-all is not set)
+//
+// Precedence rules:
+//   - If replicate-all is "true", replicate to all namespaces (ignores replicate)
+//   - If replicate-all is "false" or not set, use replicate for namespace list
+//   - If replicate-all is "false", replicate: "true" is treated as a namespace named "true"
 func ParseReplicationConfig(annotations map[string]string, sourceNamespace string) ReplicationConfig {
 	replicateTo := annotations[ReplicateKey]
+	replicateAll := annotations[ReplicateAllKey]
 	rollout := annotations[RolloutOnUpdateKey] == "true"
 
 	config := ReplicationConfig{
 		RolloutOnUpdate: rollout,
 	}
 
+	// Check for replicate-all annotation (takes precedence)
+	if replicateAll == "true" {
+		config.ReplicateAll = true
+		return config
+	}
+
+	// If replicate-all is explicitly set to "false", treat replicate value as namespace list
+	// This allows targeting a namespace literally named "true"
+	replicateAllExplicitlyFalse := replicateAll == "false"
+
+	// If replicate-all is set to something other than "true"/"false" and replicate is empty, skip
+	if replicateAll != "" && !replicateAllExplicitlyFalse && replicateTo == "" {
+		config.SkipReplication = true
+		return config
+	}
+
+	// Fall back to replicate annotation
 	if replicateTo == "" || replicateTo == "false" {
 		config.SkipReplication = true
 		return config
 	}
 
-	if replicateTo == "true" {
+	// Legacy: replizieren.dev/replicate: "true" means all namespaces
+	// UNLESS replicate-all is explicitly set to "false"
+	if replicateTo == "true" && !replicateAllExplicitlyFalse {
 		config.ReplicateAll = true
 		return config
 	}

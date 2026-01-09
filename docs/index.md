@@ -29,14 +29,14 @@ kind: Secret
 metadata:
   name: registry-credentials
   annotations:
-    replizieren.dev/replicate: "true"  # Replicate to ALL namespaces
+    replizieren.dev/replicate-all: "true"  # Replicate to ALL namespaces
 ```
 
 ### Flexible Targeting
 
 - **Single namespace**: `replizieren.dev/replicate: "production"`
 - **Multiple namespaces**: `replizieren.dev/replicate: "staging, production, testing"`
-- **All namespaces**: `replizieren.dev/replicate: "true"`
+- **All namespaces**: `replizieren.dev/replicate-all: "true"`
 
 ### Automatic Rollout Triggers
 
@@ -57,6 +57,10 @@ metadata:
 ### 1. Install Replizieren
 
 ```bash
+# Install a specific version (recommended)
+kubectl apply -f https://github.com/Kammerdiener-Technologies/replizieren/releases/download/v0.0.1/install.yaml
+
+# Or install the latest development version
 kubectl apply -f https://raw.githubusercontent.com/Kammerdiener-Technologies/replizieren/main/dist/install.yaml
 ```
 
@@ -96,7 +100,7 @@ metadata:
   name: docker-registry
   namespace: default
   annotations:
-    replizieren.dev/replicate: "true"
+    replizieren.dev/replicate-all: "true"
 type: kubernetes.io/dockerconfigjson
 data:
   .dockerconfigjson: ...
@@ -137,6 +141,20 @@ data:
   flags.json: |
     {"new_feature": true}
 ```
+
+## Compatibility
+
+Replizieren is tested against multiple Kubernetes versions:
+
+| Kubernetes | Status |
+|------------|--------|
+| 1.32.x | Tested |
+| 1.31.x | Tested |
+| 1.30.x | Tested |
+| 1.29.x | Tested |
+| 1.28.x | Tested |
+
+See [API Reference](api-reference#compatibility) for full compatibility details.
 
 ## Next Steps
 

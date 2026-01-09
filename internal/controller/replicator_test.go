@@ -142,6 +142,93 @@ func TestParseReplicationConfig_RolloutOnUpdateFalse(t *testing.T) {
 	}
 }
 
+func TestParseReplicationConfig_ReplicateAll(t *testing.T) {
+	annotations := map[string]string{
+		ReplicateAllKey: "true",
+	}
+	config := ParseReplicationConfig(annotations, "source-ns")
+	if config.SkipReplication {
+		t.Error("expected SkipReplication to be false")
+	}
+	if !config.ReplicateAll {
+		t.Error("expected ReplicateAll to be true")
+	}
+}
+
+func TestParseReplicationConfig_ReplicateAllWithNamespaces(t *testing.T) {
+	// replicate-all takes precedence over replicate namespace list
+	annotations := map[string]string{
+		ReplicateAllKey: "true",
+		ReplicateKey:    "ns1,ns2",
+	}
+	config := ParseReplicationConfig(annotations, "source-ns")
+	if !config.ReplicateAll {
+		t.Error("expected ReplicateAll to be true when replicate-all is set")
+	}
+	if len(config.TargetNamespaces) != 0 {
+		t.Errorf("expected empty TargetNamespaces when replicate-all is true, got %v", config.TargetNamespaces)
+	}
+}
+
+func TestParseReplicationConfig_ReplicateAllFalse(t *testing.T) {
+	// replicate-all: "false" should skip replication if replicate is not set
+	annotations := map[string]string{
+		ReplicateAllKey: "false",
+	}
+	config := ParseReplicationConfig(annotations, "source-ns")
+	if !config.SkipReplication {
+		t.Error("expected SkipReplication to be true when replicate-all is false and replicate is not set")
+	}
+}
+
+func TestParseReplicationConfig_ReplicateAllFalseWithNamespaces(t *testing.T) {
+	// replicate-all: "false" with replicate set should use the namespace list
+	annotations := map[string]string{
+		ReplicateAllKey: "false",
+		ReplicateKey:    "ns1,ns2",
+	}
+	config := ParseReplicationConfig(annotations, "source-ns")
+	if config.SkipReplication {
+		t.Error("expected SkipReplication to be false when replicate has namespaces")
+	}
+	if config.ReplicateAll {
+		t.Error("expected ReplicateAll to be false")
+	}
+	if len(config.TargetNamespaces) != 2 {
+		t.Errorf("expected 2 target namespaces, got %d", len(config.TargetNamespaces))
+	}
+}
+
+func TestParseReplicationConfig_NamespaceNamedTrue(t *testing.T) {
+	// A namespace literally named "true" should work when using replicate annotation
+	annotations := map[string]string{
+		ReplicateKey: "true", // Legacy: this means all namespaces
+	}
+	config := ParseReplicationConfig(annotations, "source-ns")
+	if !config.ReplicateAll {
+		t.Error("expected ReplicateAll to be true for legacy 'true' value")
+	}
+}
+
+func TestParseReplicationConfig_NamespaceNamedTrueWithReplicateAll(t *testing.T) {
+	// To target a namespace literally named "true", use replicate-all: "false" and replicate: "true"
+	annotations := map[string]string{
+		ReplicateAllKey: "false",
+		ReplicateKey:    "true",
+	}
+	config := ParseReplicationConfig(annotations, "source-ns")
+	// With replicate-all explicitly false, replicate: "true" is treated as namespace name
+	if config.ReplicateAll {
+		t.Error("expected ReplicateAll to be false when replicate-all is explicitly false")
+	}
+	if config.SkipReplication {
+		t.Error("expected SkipReplication to be false")
+	}
+	if len(config.TargetNamespaces) != 1 || config.TargetNamespaces[0] != "true" {
+		t.Errorf("expected TargetNamespaces to be ['true'], got %v", config.TargetNamespaces)
+	}
+}
+
 func TestIsDeploymentUsingSecret_EnvFrom(t *testing.T) {
 	deploy := &appsv1.Deployment{
 		Spec: appsv1.DeploymentSpec{
