@@ -102,7 +102,30 @@ data:
   .dockerconfigjson: eyJhdXRocyI6e319
 ```
 
-**Important:** The source namespace is always excluded from replication targets to prevent conflicts.
+**Important:**
+- The source namespace is always excluded from replication targets to prevent conflicts.
+- System namespaces (`kube-system`, `kube-public`, `kube-node-lease`) are automatically excluded.
+
+### Automatic Replication to New Namespaces (v0.1.0+)
+
+When you create a new namespace, Replizieren automatically replicates all resources that have `replicate-all: "true"` to the new namespace. No manual action required!
+
+```bash
+# Create a secret that replicates everywhere
+kubectl create secret generic shared-secret \
+  --from-literal=key=value \
+  -n default
+
+kubectl annotate secret shared-secret \
+  replizieren.dev/replicate-all="true" \
+  -n default
+
+# Later, create a new namespace
+kubectl create namespace my-new-app
+
+# The secret is automatically replicated!
+kubectl get secret shared-secret -n my-new-app
+```
 
 ## Automatic Updates
 
@@ -266,10 +289,11 @@ Keep track of which resources are replicated where, especially in large clusters
 
 ## Limitations
 
-1. **Namespace Must Exist**: Target namespaces must exist before replication can occur
+1. **Namespace Must Exist** (for specific targets): When using `replicate: "ns1, ns2"`, target namespaces must exist. However, with `replicate-all: "true"`, new namespaces are automatically detected (v0.1.0+)
 2. **No Cross-Cluster**: Replication only works within a single Kubernetes cluster
 3. **No Selective Fields**: The entire resource is replicated; you cannot replicate only specific keys
 4. **No Transformation**: Data is copied as-is; no templating or transformation is supported
+5. **System Namespaces Excluded**: `kube-system`, `kube-public`, and `kube-node-lease` are always excluded from `replicate-all`
 
 ## Next Steps
 

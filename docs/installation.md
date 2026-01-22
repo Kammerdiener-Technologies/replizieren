@@ -13,13 +13,50 @@ This guide covers different ways to install Replizieren in your Kubernetes clust
 - `kubectl` configured to communicate with your cluster
 - Cluster-admin privileges (for RBAC setup)
 
-## Quick Install (Recommended)
+## Install with Helm (Recommended)
 
-The easiest way to install is using the install manifest from a specific release:
+The easiest way to install Replizieren is using Helm:
+
+```bash
+helm install replizieren oci://ghcr.io/kammerdiener-technologies/charts/replizieren \
+  --version 0.1.0 \
+  --namespace replizieren-system \
+  --create-namespace
+```
+
+### Helm Configuration
+
+You can customize the installation using values:
+
+```bash
+helm install replizieren oci://ghcr.io/kammerdiener-technologies/charts/replizieren \
+  --version 0.1.0 \
+  --namespace replizieren-system \
+  --create-namespace \
+  --set replicaCount=2 \
+  --set resources.limits.memory=256Mi
+```
+
+Available values:
+
+| Value | Default | Description |
+|-------|---------|-------------|
+| `replicaCount` | `1` | Number of replicas (uses leader election) |
+| `image.repository` | `ghcr.io/kammerdiener-technologies/replizieren` | Image repository |
+| `image.tag` | Chart appVersion | Image tag |
+| `resources.limits.cpu` | `500m` | CPU limit |
+| `resources.limits.memory` | `128Mi` | Memory limit |
+| `resources.requests.cpu` | `10m` | CPU request |
+| `resources.requests.memory` | `64Mi` | Memory request |
+| `controller.leaderElect` | `true` | Enable leader election |
+
+## Install with kubectl
+
+Install using the manifest from a specific release:
 
 ```bash
 # Install a specific version (recommended for production)
-kubectl apply -f https://github.com/Kammerdiener-Technologies/replizieren/releases/download/v0.0.1/install.yaml
+kubectl apply -f https://github.com/Kammerdiener-Technologies/replizieren/releases/download/v0.1.0/install.yaml
 ```
 
 Or install the latest development version from main:
@@ -51,7 +88,7 @@ For more control over the installation, use kustomize:
 
 ```bash
 # Using kustomize with a specific version
-kubectl apply -k https://github.com/Kammerdiener-Technologies/replizieren/config/default?ref=v0.0.1
+kubectl apply -k https://github.com/Kammerdiener-Technologies/replizieren/config/default?ref=v0.1.0
 ```
 
 Or clone and deploy:
@@ -59,7 +96,7 @@ Or clone and deploy:
 ```bash
 git clone https://github.com/Kammerdiener-Technologies/replizieren.git
 cd replizieren
-make deploy IMG=ghcr.io/kammerdiener-technologies/replizieren:v0.0.1
+make deploy IMG=ghcr.io/kammerdiener-technologies/replizieren:v0.1.0
 ```
 
 ## Build from Source
@@ -159,7 +196,7 @@ make undeploy
 
 ```bash
 # Delete using the same manifest you installed with
-kubectl delete -f https://github.com/Kammerdiener-Technologies/replizieren/releases/download/v0.0.1/install.yaml
+kubectl delete -f https://github.com/Kammerdiener-Technologies/replizieren/releases/download/v0.1.0/install.yaml
 
 # Or delete namespace (removes everything)
 kubectl delete namespace replizieren-system

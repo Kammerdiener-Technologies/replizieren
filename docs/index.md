@@ -32,6 +32,12 @@ metadata:
     replizieren.dev/replicate-all: "true"  # Replicate to ALL namespaces
 ```
 
+### Namespace Watcher (v0.1.0+)
+
+When new namespaces are created, Replizieren automatically replicates resources that have `replicate-all: "true"` to the new namespace. No manual intervention required!
+
+System namespaces (`kube-system`, `kube-public`, `kube-node-lease`) are excluded by default.
+
 ### Flexible Targeting
 
 - **Single namespace**: `replizieren.dev/replicate: "production"`
@@ -56,9 +62,20 @@ metadata:
 
 ### 1. Install Replizieren
 
+**Using Helm (recommended):**
+
 ```bash
-# Install a specific version (recommended)
-kubectl apply -f https://github.com/Kammerdiener-Technologies/replizieren/releases/download/v0.0.1/install.yaml
+helm install replizieren oci://ghcr.io/kammerdiener-technologies/charts/replizieren \
+  --version 0.1.0 \
+  --namespace replizieren-system \
+  --create-namespace
+```
+
+**Using kubectl:**
+
+```bash
+# Install a specific version
+kubectl apply -f https://github.com/Kammerdiener-Technologies/replizieren/releases/download/v0.1.0/install.yaml
 
 # Or install the latest development version
 kubectl apply -f https://raw.githubusercontent.com/Kammerdiener-Technologies/replizieren/main/dist/install.yaml

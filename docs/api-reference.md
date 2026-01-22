@@ -74,6 +74,11 @@ Controls replication to all namespaces. This is the **preferred** way to replica
 | `"false"` | Explicitly disable "all namespaces" mode |
 | `""` (empty/missing) | Falls back to `replicate` annotation behavior |
 
+#### Behavior
+
+- **System namespaces excluded**: `kube-system`, `kube-public`, and `kube-node-lease` are always excluded from `replicate-all`
+- **New namespace detection (v0.1.0+)**: When new namespaces are created, resources with `replicate-all: "true"` are automatically replicated to them
+
 #### Precedence Rules
 
 When both `replicate-all` and `replicate` are set:
@@ -229,12 +234,26 @@ The following are NOT preserved (set by Kubernetes):
 
 ## Controller Behavior
 
+### Controllers
+
+Replizieren runs three controllers:
+
+| Controller | Watches | Purpose |
+|------------|---------|---------|
+| Secret Controller | Secrets | Replicates secrets based on annotations |
+| ConfigMap Controller | ConfigMaps | Replicates configmaps based on annotations |
+| Namespace Controller | Namespaces | Replicates `replicate-all` resources to new namespaces |
+
 ### Reconciliation
 
-The controller reconciles on:
+The Secret and ConfigMap controllers reconcile on:
 - Resource creation
 - Resource update
 - Resource deletion (no action taken on replicated copies)
+
+The Namespace controller reconciles on:
+- Namespace creation (replicates all `replicate-all` resources)
+- Skips system namespaces and namespaces being deleted
 
 ### Error Handling
 
