@@ -1,0 +1,26 @@
+Replizieren has been installed!
+
+To replicate a Secret to all namespaces, add this annotation:
+  replizieren.dev/replicate-all: "true"
+
+To replicate a Secret to specific namespaces, add this annotation:
+  replizieren.dev/replicate: "namespace1,namespace2"
+
+To trigger deployment rollouts when a resource changes:
+  replizieren.dev/rollout-on-update: "true"
+
+Example Secret:
+  apiVersion: v1
+  kind: Secret
+  metadata:
+    name: my-shared-secret
+    namespace: default
+    annotations:
+      replizieren.dev/replicate-all: "true"
+      replizieren.dev/rollout-on-update: "true"
+  type: Opaque
+  stringData:
+    api-key: "my-secret-value"
+
+For more information, visit:
+  https://github.com/Kammerdiener-Technologies/replizieren
