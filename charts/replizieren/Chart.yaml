@@ -1,0 +1,19 @@
+apiVersion: v2
+name: replizieren
+description: A Kubernetes operator that replicates Secrets and ConfigMaps across namespaces and triggers deployment rollouts on resource changes
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kubernetes
+  - operator
+  - secrets
+  - configmaps
+  - replication
+  - namespace
+home: https://github.com/Kammerdiener-Technologies/replizieren
+sources:
+  - https://github.com/Kammerdiener-Technologies/replizieren
+maintainers:
+  - name: Kammerdiener Technologies
+    url: https://github.com/Kammerdiener-Technologies

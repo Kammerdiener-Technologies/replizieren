@@ -180,3 +180,74 @@ func IsDeploymentUsingConfigMap(deploy *appsv1.Deployment, cmName string) bool {
 	}
 	return false
 }
+
+// SystemNamespaces contains namespaces that should be excluded from replication
+var SystemNamespaces = map[string]bool{
+	"kube-system":     true,
+	"kube-public":     true,
+	"kube-node-lease": true,
+}
+
+// IsSystemNamespace returns true if the namespace is a system namespace
+func IsSystemNamespace(name string) bool {
+	return SystemNamespaces[name]
+}
+
+// ShouldReplicateToNamespace checks if a resource should be replicated to a target namespace
+func ShouldReplicateToNamespace(annotations map[string]string, targetNamespace, sourceNamespace string) bool {
+	if targetNamespace == sourceNamespace {
+		return false
+	}
+	if IsSystemNamespace(targetNamespace) {
+		return false
+	}
+
+	config := ParseReplicationConfig(annotations, sourceNamespace)
+	if config.SkipReplication {
+		return false
+	}
+	if config.ReplicateAll {
+		return true
+	}
+
+	for _, ns := range config.TargetNamespaces {
+		if ns == targetNamespace {
+			return true
+		}
+	}
+	return false
+}
+
+// GetSecretsToReplicateAll returns all secrets that have replicate-all or replicate: true annotation
+func GetSecretsToReplicateAll(ctx context.Context, c client.Client) ([]corev1.Secret, error) {
+	var secretList corev1.SecretList
+	if err := c.List(ctx, &secretList); err != nil {
+		return nil, err
+	}
+
+	var result []corev1.Secret
+	for _, secret := range secretList.Items {
+		config := ParseReplicationConfig(secret.Annotations, secret.Namespace)
+		if config.ReplicateAll {
+			result = append(result, secret)
+		}
+	}
+	return result, nil
+}
+
+// GetConfigMapsToReplicateAll returns all configmaps that have replicate-all or replicate: true annotation
+func GetConfigMapsToReplicateAll(ctx context.Context, c client.Client) ([]corev1.ConfigMap, error) {
+	var cmList corev1.ConfigMapList
+	if err := c.List(ctx, &cmList); err != nil {
+		return nil, err
+	}
+
+	var result []corev1.ConfigMap
+	for _, cm := range cmList.Items {
+		config := ParseReplicationConfig(cm.Annotations, cm.Namespace)
+		if config.ReplicateAll {
+			result = append(result, cm)
+		}
+	}
+	return result, nil
+}
