@@ -41,6 +41,12 @@ jobs:
       - name: Verify kind installation
         run: kind version
 
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Running Test e2e on Kubernetes ${{ matrix.k8s-version }}
         run: |
           go mod tidy
