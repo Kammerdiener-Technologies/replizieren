@@ -18,6 +18,25 @@
 - **Rollout Triggers**: Optionally restart Deployments when Secrets/ConfigMaps are updated
 - **Lightweight**: Single controller handles both Secrets and ConfigMaps
 
+## Kubernetes Compatibility
+
+Replizieren is tested against the following Kubernetes versions in CI:
+
+| Kubernetes Version | Status | Notes |
+|--------------------|--------|-------|
+| v1.35.x | ✅ Tested | Current latest |
+| v1.34.x | ✅ Tested | |
+| v1.33.x | ✅ Tested | |
+| v1.32.x | ✅ Tested | |
+| v1.31.x | ✅ Tested | Oldest tested |
+| v1.30.x | ⚠️ Untested | EOL |
+| v1.29.x | ⚠️ Untested | EOL |
+| < v1.29 | ❌ Unsupported | |
+
+> **Note:** Replizieren may work on older versions but is not actively tested against them. The test matrix is kept in sync with [kind's available node images](https://github.com/kubernetes-sigs/kind/releases).
+
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-v1.31--v1.35-blue?logo=kubernetes)](https://github.com/Kammerdiener-Technologies/replizieren/actions/workflows/test-e2e.yml)
+
 ## Quick Start
 
 ### Installation
