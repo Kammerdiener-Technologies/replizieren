@@ -13,15 +13,14 @@ jobs:
       matrix:
         # Test against multiple Kubernetes versions
         # See https://github.com/kubernetes-sigs/kind/releases for available images
-        # Latest patch versions from kind v0.31.0; v1.28 dropped (EOL); v1.35 drops cgroup v1 support
+        # Latest patch versions from kind v0.31.0; v1.29 and v1.30 dropped (EOL, not available in kind v0.31.0)
+        # v1.35+ drops cgroup v1 support — requires cgroup v2 on the host
         k8s-version:
           - v1.35.0
           - v1.34.3
           - v1.33.7
           - v1.32.11
           - v1.31.14
-          - v1.30.8
-          - v1.29.12
 
     steps:
       - name: Clone the code
